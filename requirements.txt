@@ -1,0 +1,15 @@
+gunicorn==20.1.0
+dash
+pandas
+dash_bootstrap_components
+openpyxl
+screeninfo
+numpy
+google-cloud
+google-cloud-storage
+google-cloud-bigquery
+pyarrow
+pytz
+fsspec
+gcsfs
+db-dtypes
