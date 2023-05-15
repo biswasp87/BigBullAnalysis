@@ -171,7 +171,7 @@ content_third_row = dbc.Row([
                         id="b_band_limit", type="number", placeholder="Bollinger Band", min=1, max=200, step=1, value=2,
                         style={'width': '150px'}),
                     dcc.Input(
-                        id="kc_limit", type="number", placeholder="Keltner Channel", min=1, max=200, step=1, value=1.2,
+                        id="kc_limit", type="number", placeholder="Keltner Channel", min=1, max=200, step=0.1, value=1.2,
                         style={'width': '150px'}),
                 ]
             )
