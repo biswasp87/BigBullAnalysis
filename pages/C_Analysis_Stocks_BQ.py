@@ -168,7 +168,7 @@ content_third_row = dbc.Row([
                     dcc.RangeSlider(id='my-range-slider', min=400, max=800, step=50, value=[550], marks=None,),
                     html.Hr(),
                     dcc.Input(
-                        id="b_band_limit", type="number", placeholder="Bollinger Band", min=1, max=200, step=1, value=2,
+                        id="b_band_limit", type="number", placeholder="Bollinger Band", min=1, max=200, step=0.1, value=2,
                         style={'width': '150px'}),
                     dcc.Input(
                         id="kc_limit", type="number", placeholder="Keltner Channel", min=1, max=200, step=0.1, value=1.2,
