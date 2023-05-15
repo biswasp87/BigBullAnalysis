@@ -2,7 +2,7 @@ import dash
 # To create meta tag for each page, define the title, image, and description.
 dash.register_page(
     __name__,
-#     path='/',
+    # path='/',
     title='FNO Stock Analysis',
     name='Stock Analysis FNO'
 )
@@ -334,6 +334,22 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     df_stock["FUT_BUILD_UP_COL"] = np.where(((df_stock["FUT_BUILD_UP"] == "LB") & (df_stock["FUT_BUILD_UP"] == "SC")), 'green', 'red')
     df_stock["PCR_MA_COL"] = np.where(df_stock["CUR_PCR"] >= 110, 'green',
                                        np.where((df_stock["CUR_PCR"] < 110) & (df_stock["CUR_PCR"] > 80), 'yellow', 'red'))
+    # Consolidation Phase
+    df_stock['SMA'] = df_stock['EQ_CLOSE_PRICE'].rolling(window = 20).mean()     #Simple Moving Average calculation (period = 20)
+    df_stock['stdev'] = df_stock['EQ_CLOSE_PRICE'].rolling(window = 20).std()    #Standard Deviation calculation
+    df_stock['Lower_Bollinger'] = df_stock['SMA'] - (2 * df_stock['stdev'])   #Calculation of the lower curve of the Bollinger Bands
+    df_stock['Upper_Bollinger'] = df_stock['SMA'] + (2 * df_stock['stdev'])   #Upper curve
+
+    df_stock['TR'] = abs(df_stock['EQ_HIGH_PRICE'] - df_stock['EQ_LOW_PRICE'])      #True Range calculation
+    df_stock['ATR'] = df_stock['TR'].rolling(window = 20).mean()    #Average True Range
+
+    df_stock['Upper_KC'] = df_stock['SMA'] + (1.2 * df_stock['ATR'])      #Upper curve of the Keltner Channel
+    df_stock['Lower_KC'] = df_stock['SMA'] - (1.2 * df_stock['ATR'])      #Lower curve
+
+    # def in_consolidation(df_stock):       #function testing if a symbol is consolidating (Bollinger Bands in Keltner Channel)
+    #     return df_stock['Lower_Bollinger'] > df_stock['Lower_KC'] and df_stock['Upper_Bollinger'] < df_stock['Upper_KC']
+
+    df_stock['consolidation'] = np.where((df_stock['Lower_Bollinger'] > df_stock['Lower_KC']) & (df_stock['Upper_Bollinger'] < df_stock['Upper_KC']),"yellow","white")
     df_stock.info(verbose=True)
 
     try:
@@ -368,10 +384,10 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     # ____________________________________________________________
 
     fig = make_subplots(
-        rows=13, cols=1,
+        rows=14, cols=1,
         # row_heights=[0.50, 0.15, 0.1, 0.1, 0.03, 0.12],
-        row_heights=[0.41, 0.09, 0.085, 0.085, 0.03, 0.09, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03],
-        specs=[[{}], [{"secondary_y": True}], [{}], [{}], [{}], [{"secondary_y": True}], [{}], [{}], [{}], [{}], [{}], [{}], [{}]],
+        row_heights=[0.38, 0.09, 0.085, 0.085, 0.03, 0.09, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03],
+        specs=[[{}], [{"secondary_y": True}], [{}], [{}], [{}], [{"secondary_y": True}], [{}], [{}], [{}], [{}], [{}], [{}], [{}], [{}]],
         print_grid=True, shared_xaxes=True, horizontal_spacing=0.05, vertical_spacing=0)
 
     config = dict({'scrollZoom': True})
@@ -516,6 +532,11 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
         go.Scatter(x=df_stock['TIMESTAMP'], y=df_stock['BAR'], mode='markers', name="PCR",
                    marker=dict(size=10, symbol=1, color=df_stock['PCR_MA_COL'])),
         row=13, col=1)
+    # Add consolidation
+    fig.add_trace(
+        go.Scatter(x=df_stock['TIMESTAMP'], y=df_stock['BAR'], mode='markers', name="Consolidation",
+                   marker=dict(size=10, symbol=1, color=df_stock['consolidation'])),
+        row=14, col=1)
     # edit axis labels
     fig['layout']['yaxis']['title'] = 'Equity OHCL'
     fig['layout']['yaxis3']['title'] = 'Volume'
