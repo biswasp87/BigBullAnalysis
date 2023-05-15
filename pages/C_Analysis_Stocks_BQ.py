@@ -166,6 +166,13 @@ content_third_row = dbc.Row([
                         style={'width': '150px'}),
                     html.Hr(),
                     dcc.RangeSlider(id='my-range-slider', min=400, max=800, step=50, value=[550], marks=None,),
+                    html.Hr(),
+                    dcc.Input(
+                        id="b_band_limit", type="number", placeholder="Bollinger Band", min=1, max=200, step=1, value=2,
+                        style={'width': '150px'}),
+                    dcc.Input(
+                        id="kc_limit", type="number", placeholder="Keltner Channel", min=1, max=200, step=1, value=1.2,
+                        style={'width': '150px'}),
                 ]
             )
         ),
@@ -260,9 +267,11 @@ def update_dropdown(n_clicks, n_clicks_next, dropdown_value, dropdown_opt_val):
      Input('input_short_SMA', 'value'),
      Input('input_medium_SMA', 'value'),
      Input('input_long_SMA', 'value'),
-     Input('my-range-slider', 'value'),])
+     Input('my-range-slider', 'value'),
+     Input('b_band_limit', 'value'),
+     Input('kc_limit', 'value')])
 def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, dropdown_n_days_value,
-                    short_sma, medium_sma, long_sma, graph_height):
+                    short_sma, medium_sma, long_sma, graph_height,b_band,kc):
     print(dropdown_value)
     print(dropdown_exp_value)
     print(dropdown_opt_value)
@@ -271,6 +280,8 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     print(medium_sma)
     print(long_sma)
     print(graph_height[0])
+    print(b_band)
+    print(kc)
 
 
     expiry_date = datetime.strptime(dropdown_exp_value, "%d-%b-%Y").date()
@@ -335,16 +346,16 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     df_stock["PCR_MA_COL"] = np.where(df_stock["CUR_PCR"] >= 110, 'green',
                                        np.where((df_stock["CUR_PCR"] < 110) & (df_stock["CUR_PCR"] > 80), 'yellow', 'red'))
     # Consolidation Phase
-    df_stock['SMA'] = df_stock['EQ_CLOSE_PRICE'].rolling(window = 20).mean()     #Simple Moving Average calculation (period = 20)
-    df_stock['stdev'] = df_stock['EQ_CLOSE_PRICE'].rolling(window = 20).std()    #Standard Deviation calculation
-    df_stock['Lower_Bollinger'] = df_stock['SMA'] - (2 * df_stock['stdev'])   #Calculation of the lower curve of the Bollinger Bands
-    df_stock['Upper_Bollinger'] = df_stock['SMA'] + (2 * df_stock['stdev'])   #Upper curve
+    df_stock['SMA'] = df_stock['EQ_CLOSE_PRICE'].rolling(window = long_sma).mean()     #Simple Moving Average calculation (period = 20)
+    df_stock['stdev'] = df_stock['EQ_CLOSE_PRICE'].rolling(window = long_sma).std()    #Standard Deviation calculation
+    df_stock['Lower_Bollinger'] = df_stock['SMA'] - (b_band * df_stock['stdev'])   #Calculation of the lower curve of the Bollinger Bands
+    df_stock['Upper_Bollinger'] = df_stock['SMA'] + (b_band * df_stock['stdev'])   #Upper curve
 
     df_stock['TR'] = abs(df_stock['EQ_HIGH_PRICE'] - df_stock['EQ_LOW_PRICE'])      #True Range calculation
-    df_stock['ATR'] = df_stock['TR'].rolling(window = 20).mean()    #Average True Range
+    df_stock['ATR'] = df_stock['TR'].rolling(window = long_sma).mean()    #Average True Range
 
-    df_stock['Upper_KC'] = df_stock['SMA'] + (1.2 * df_stock['ATR'])      #Upper curve of the Keltner Channel
-    df_stock['Lower_KC'] = df_stock['SMA'] - (1.2 * df_stock['ATR'])      #Lower curve
+    df_stock['Upper_KC'] = df_stock['SMA'] + (kc * df_stock['ATR'])      #Upper curve of the Keltner Channel
+    df_stock['Lower_KC'] = df_stock['SMA'] - (kc * df_stock['ATR'])      #Lower curve
 
     # def in_consolidation(df_stock):       #function testing if a symbol is consolidating (Bollinger Bands in Keltner Channel)
     #     return df_stock['Lower_Bollinger'] > df_stock['Lower_KC'] and df_stock['Upper_Bollinger'] < df_stock['Upper_KC']
