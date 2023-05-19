@@ -272,17 +272,6 @@ def update_dropdown(n_clicks, n_clicks_next, dropdown_value, dropdown_opt_val):
      Input('kc_limit', 'value')])
 def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, dropdown_n_days_value,
                     short_sma, medium_sma, long_sma, graph_height,b_band,kc):
-    print(dropdown_value)
-    print(dropdown_exp_value)
-    print(dropdown_opt_value)
-    print(dropdown_n_days_value)
-    print(short_sma)
-    print(medium_sma)
-    print(long_sma)
-    print(graph_height[0])
-    print(b_band)
-    print(kc)
-
 
     expiry_date = datetime.strptime(dropdown_exp_value, "%d-%b-%Y").date()
     print(expiry_date)
