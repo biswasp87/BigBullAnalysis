@@ -331,7 +331,7 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     df_stock["QT_MA_COL"] = np.where((df_stock["QT_MA_S"] > df_stock["QT_MA_M"]) & (df_stock["QT_MA_M"] > df_stock["QT_MA_L"]), 'green',
                                         np.where((df_stock["QT_MA_M"] > df_stock["QT_MA_S"]) & (df_stock["QT_MA_M"] > df_stock["QT_MA_L"]),'yellow', 'red'))
 
-    df_stock["FUT_BUILD_UP_COL"] = np.where(((df_stock["FUT_BUILD_UP"] == "LB") & (df_stock["FUT_BUILD_UP"] == "SC")), 'green', 'red')
+    df_stock["FUT_BUILD_UP_COL"] = np.where(((df_stock["FUT_BUILD_UP"] == "LB") | (df_stock["FUT_BUILD_UP"] == "SC")), 'green', 'red')
     df_stock["PCR_MA_COL"] = np.where(df_stock["CUR_PCR"] >= 110, 'green',
                                        np.where((df_stock["CUR_PCR"] < 110) & (df_stock["CUR_PCR"] > 80), 'yellow', 'red'))
     # Consolidation Phase
