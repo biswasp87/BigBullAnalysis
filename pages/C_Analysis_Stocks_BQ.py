@@ -102,29 +102,32 @@ content_third_row = dbc.Row([
         dbc.Card(
             dbc.CardBody(
                 [
+                    html.H6("Select Watchlist"),
                     dcc.Dropdown(
                         id='dropdown_opt',
                         options=[{'label': x, 'value': x}
                                  for x in dropdown_opt_list.DRP_OPT],
                         value=dropdown_opt_list.DRP_OPT[0],  # default value
-                        multi=False
+                        multi=False,
                     ),
-                    html.Br(),
+                    html.H6("Select Stock"),
                     dcc.Dropdown(
                         id='dropdown',
                         options=[{'label': x, 'value': x}
                                  for x in watchlist.Symbol],
                         value='TATAMOTORS',  # default value
+                        maxHeight=150,
                     ),
-                    html.Br(),
+                    html.H6("Select Expiry"),
                     dcc.Dropdown(
                         id='dropdown_exp',
                         options=[{'label': x, 'value': x}
                                  for x in Expiry_Date_Monthly.Monthly],
                         value=Expiry_Date_Monthly.Monthly[0],  # default value
-                        multi=False
+                        multi=False,
+                        maxHeight=150,
                     ),
-                    html.Br(),
+                    html.H6("Select No. of days"),
                     dcc.Dropdown(
                         id='dropdown_n_days',
                         options=[{'label': 7, 'value': 7},
@@ -133,9 +136,10 @@ content_third_row = dbc.Row([
                                  {'label': 60, 'value': 60},
                                  {'label': 90, 'value': 90}],
                         value=30,  # default value
-                        multi=False
+                        multi=False,
+                        maxHeight=150,
                     ),
-                    html.Br(),
+                    html.H6("Pre / Next Stock"),
                     dbc.ButtonGroup([
                         dbc.Button(
                             id='submit_button',
@@ -155,23 +159,27 @@ content_third_row = dbc.Row([
                         ),
                     ], size='md'),
                     html.Hr(),
+                    html.H6("Short Trend Period"),
                     dcc.Input(
-                        id="input_short_SMA", type="number", placeholder="Short SMA", min=1, max=200, step=1, value=3,
+                        id="input_short_SMA", type="number", placeholder="Short SMA", min=1, max=200, step=1, value=3, size="sm",
                         style={'width': '150px'}),
+                    html.H6("Mid Trend Period"),
                     dcc.Input(
-                        id="input_medium_SMA", type="number", placeholder="Medium SMA", min=1, max=200, step=1, value=7,
+                        id="input_medium_SMA", type="number", placeholder="Medium SMA", min=1, max=200, step=1, value=7, size="sm",
                         style={'width': '150px'}),
+                    html.H6("Long Trend Period"),
                     dcc.Input(
-                        id="input_long_SMA", type="number", placeholder="Long SMA", min=1, max=200, step=1, value=21,
+                        id="input_long_SMA", type="number", placeholder="Long SMA", min=1, max=200, step=1, value=21, size="sm",
                         style={'width': '150px'}),
-                    html.Hr(),
+                    html.H6("Select Resolution"),
                     dcc.RangeSlider(id='my-range-slider', min=400, max=800, step=50, value=[550], marks=None,),
-                    html.Hr(),
+                    html.H6("Bollinger Band Channel"),
                     dcc.Input(
-                        id="b_band_limit", type="number", placeholder="Bollinger Band", min=1, max=200, step=0.1, value=2,
+                        id="b_band_limit", type="number", placeholder="Bollinger Band", min=1, max=200, step=0.1, value=1.5, size="sm",
                         style={'width': '150px'}),
+                    html.H6("Keltler Channel"),
                     dcc.Input(
-                        id="kc_limit", type="number", placeholder="Keltner Channel", min=1, max=200, step=0.1, value=1.2,
+                        id="kc_limit", type="number", placeholder="Keltner Channel", min=1, max=200, step=0.1, value=1.2, size="sm",
                         style={'width': '150px'}),
                 ]
             )
@@ -398,14 +406,12 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     # fig.update_yaxes(mirror=True, row=1, col=1)
     fig.update_yaxes(mirror="ticks", side='right')
     fig.update_yaxes(showticklabels=False, row=5, col=1)
-    fig.update_layout(yaxis6=dict(showticklabels=False),
-                      yaxis8=dict(showticklabels=False),
-                      yaxis9=dict(showticklabels=False),
-                      yaxis10=dict(showticklabels=False),
-                      yaxis11=dict(showticklabels=False),
-                      yaxis12=dict(showticklabels=False),
-                      yaxis13=dict(showticklabels=False),
-                      yaxis14=dict(showticklabels=False))
+    fig.update_layout(yaxis3=dict(showticklabels=False), yaxis6=dict(showticklabels=False),
+                      yaxis8=dict(showticklabels=False), yaxis9=dict(showticklabels=False),
+                      yaxis10=dict(showticklabels=False), yaxis11=dict(showticklabels=False),
+                      yaxis12=dict(showticklabels=False), yaxis13=dict(showticklabels=False),
+                      yaxis14=dict(showticklabels=False), yaxis15=dict(showticklabels=False),
+                      yaxis16=dict(showticklabels=False), yaxis17=dict(showticklabels=False))
     fig.update_layout(dragmode='drawline', newshape_line_color='cyan')
     fig.update_layout(showlegend=False)
     fig.update_layout(xaxis1=dict(rangeslider_visible=False))
@@ -539,10 +545,9 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
         row=14, col=1)
     # edit axis labels
     fig['layout']['yaxis']['title'] = 'Equity OHCL'
-    fig['layout']['yaxis3']['title'] = 'Volume'
+    fig['layout']['yaxis2']['title'] = 'Volume'
     fig['layout']['yaxis4']['title'] = 'Q/T'
     fig['layout']['yaxis5']['title'] = 'COI'
-    fig['layout']['yaxis6']['title'] = 'Vol Explo'
     fig['layout']['yaxis7']['title'] = 'PCR'
 
     return fig
