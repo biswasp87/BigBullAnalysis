@@ -9,7 +9,6 @@ dash.register_page(
 
 from dash import Dash, dcc, html, Input, Output, callback
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output, State
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import numpy as np
@@ -17,7 +16,7 @@ import pandas as pd
 from google.cloud import storage
 from google.cloud import bigquery
 from datetime import date, timedelta, datetime
-
+import dash_daq as daq
 
 lot_size_list = pd.read_csv("gs://bba_support_files/Lot_Size.csv")
 watchlist = pd.read_csv("gs://bba_support_files/WL_ALL.csv")
@@ -119,6 +118,10 @@ content_third_row = dbc.Row([
                         maxHeight=150,
                     ),
                     html.H6("Select Expiry"),
+                    daq.BooleanSwitch(
+                        id="expiry_selection",
+                        on=False,
+                    ),
                     dcc.Dropdown(
                         id='dropdown_exp',
                         options=[{'label': x, 'value': x}
@@ -206,6 +209,27 @@ def update_dropdown_list(dropdown_item_value):
     options = [{'label': x, 'value': x}
                for x in wl['Symbol']]
     return options
+
+@callback(
+    Output('dropdown_exp', 'options'),
+    Output('dropdown_exp', 'value'),
+    [Input('expiry_selection', 'on')])
+def update_expiry_list(expiry_togle_option):
+    uri_expiry_full = "gs://bba_support_files/Expiry_Date_Full.csv"
+    uri_expiry_monthly = "gs://bba_support_files/Expiry_Date_Monthly.csv"
+    df_expiry_full = pd.read_csv(uri_expiry_full)
+    df_expiry_full.style.format({"Full": lambda t: t.strftime("%d-%b-%Y")})
+    print(df_expiry_full)
+    df_expiry_monthly = pd.read_csv(uri_expiry_monthly)
+    if expiry_togle_option == True:
+        options = [{'label': x, 'value': x}
+                   for x in df_expiry_full['Full']]
+        value = df_expiry_monthly.Monthly[0]
+    else:
+        options = [{'label': x, 'value': x}
+                   for x in df_expiry_monthly['Monthly']]
+        value = Expiry_Date_Monthly.Monthly[0]
+    return options, value
 
 @callback(
     Output('dropdown', 'value'),

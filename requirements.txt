@@ -13,3 +13,4 @@ pytz
 fsspec
 gcsfs
 db-dtypes
+dash_daq

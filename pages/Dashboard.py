@@ -1,6 +1,4 @@
 import dash
-import requests
-
 # To create meta tag for each page, define the title, image, and description.
 dash.register_page(
     __name__,
@@ -8,22 +6,19 @@ dash.register_page(
     title='Settings',
     name='Settings'
 )
-
-from dash import Dash, dcc, html, Input, Output, callback
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output, State
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
-import numpy as np
-import pandas as pd
+from dash import Dash, dcc, html, Input, Output, callback
 from google.cloud import storage
-from google.cloud import bigquery
 from datetime import date, timedelta, datetime
+import requests
 
+# PART I: Defining Google Storage Client & Bucket
+# ___________________________________________________________________________________________________________
+storage_client = storage.Client()
+bucket = storage_client.bucket('biswasp87')
 
-master_data = pd.read_csv("gs://biswasp87/last_Master_Data_updated_on.csv")
-watchlist = pd.read_csv("gs://biswasp87/last_watchlist_updated_on.csv")
-scanner = pd.read_csv("gs://biswasp87/last_scanner_updated_on.csv")
+# PART II: Preparing the Layout
+# ___________________________________________________________________________________________________________
 
 first_card_content = [
     dbc.CardHeader("Master Data"),
@@ -71,22 +66,25 @@ content = html.Div(
 )
 
 layout = html.Div([content])
+
+# PART III: Defining the Callbacks to update the Card Details
+# ___________________________________________________________________________________________________________
 @callback(
     Output(component_id='master_data_heading', component_property='children'),
     Output(component_id='master_data_para', component_property='children'),
     Input(component_id='master_data_button', component_property='n_clicks'),
 )
 def update_master_data_card(n):
-    master_last_updated_on = master_data['last_data_day'].iloc[-1]
+    blob_watchlist = bucket.get_blob('last_watchlist_updated_on.csv')
     if n is None:
-        text_one = "Last Updated on " + master_last_updated_on
+        text_one = "Last Updated on " + str(datetime.date(blob_watchlist.updated))
         text_two = "Click on the Button for Manual Update"
         return text_one, text_two
     elif n == 1:
         r = requests.post("https://asia-south1-phrasal-fire-373510.cloudfunctions.net/BBA_Update_Scanner_10m_opt_vol")
         r_status = r.status_code
         if r_status == 200:
-            text_one = 'Updated Successfully at ' + str(datetime.now())
+            text_one = 'Updated Successfully at ' + str(datetime.date(blob_watchlist.updated))
             text_two = ''
             return text_one, text_two
         else:
@@ -103,16 +101,16 @@ def update_master_data_card(n):
     Input(component_id='watchlist_data_button', component_property='n_clicks'),
 )
 def update_watchlist_data_card(n):
-    watchlist_last_updated_on = watchlist['last_data_day'].iloc[-1]
+    blob_watchlist = bucket.get_blob('last_watchlist_updated_on.csv')
     if n is None:
-        text_one = "Last Updated on " + watchlist_last_updated_on
+        text_one = "Last Updated on " + str(datetime.date(blob_watchlist.updated))
         text_two = "Click on the Button for Manual Update"
         return text_one, text_two
     elif n == 1:
         r = requests.post("https://asia-south1-phrasal-fire-373510.cloudfunctions.net/BBA_Update_Watchlist")
         r_status = r.status_code
         if r_status == 200:
-            text_one = 'Updated Successfully at ' + str(datetime.now())
+            text_one = 'Updated Successfully at ' + str(datetime.date(blob_watchlist.updated))
             text_two = ''
             return text_one, text_two
         else:
@@ -130,16 +128,16 @@ def update_watchlist_data_card(n):
     Input(component_id='scanner_data_button', component_property='n_clicks'),
 )
 def update_scanner_data_card(n):
-    scanner_last_updated_on = scanner['last_data_day'].iloc[-1]
+    blob_scanner = bucket.get_blob('last_scanner_updated_on.csv')
     if n is None:
-        text_one = "Last Updated on " + scanner_last_updated_on
+        text_one = "Last Updated on " + str(datetime.date(blob_scanner.updated))
         text_two = "Click on the Button for Manual Update"
         return text_one, text_two
     elif n == 1:
         r = requests.post("https://asia-south1-phrasal-fire-373510.cloudfunctions.net/BBA_Update_Scanner_10m_opt_vol")
         r_status = r.status_code
         if r_status == 200:
-            text_one = 'Updated Successfully at ' + str(datetime.now())
+            text_one = 'Updated Successfully at ' + str(datetime.date(blob_scanner.updated))
             text_two = ''
             return text_one, text_two
         else:

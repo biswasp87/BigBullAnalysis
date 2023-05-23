@@ -4,10 +4,6 @@ import dash_bootstrap_components as dbc # pip install dash-bootstrap-components
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], use_pages=True)
 
-# for x in dash.page_registry.values():
-
-#     print(x)ujgvb
-
 navbar = dbc.NavbarSimple(
     dbc.DropdownMenu(
         [
