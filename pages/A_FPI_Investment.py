@@ -21,6 +21,9 @@ Master_Spot_Data = pd.DataFrame()
 FPI_Investment_Equity_Exst = pd.read_csv('gs://bba_support_files/FPI_Investment_Equity.csv')
 FPI_Investment_Debt_Exst = pd.read_csv('gs://bba_support_files/FPI_Investment_Debt.csv')
 
+FPI_Investment_Equity_Exst.drop(FPI_Investment_Equity_Exst.columns[FPI_Investment_Equity_Exst.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
+FPI_Investment_Debt_Exst.drop(FPI_Investment_Debt_Exst.columns[FPI_Investment_Debt_Exst.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
+
 FPI_Data = FPI_Investment_Equity_Exst
 FPI_Data.columns.astype(str)
 
