@@ -216,11 +216,13 @@ def update_dropdown_list(dropdown_item_value):
     [Input('expiry_selection', 'on')])
 def update_expiry_list(expiry_togle_option):
     uri_expiry_full = "gs://bba_support_files/Expiry_Date_Full.csv"
-    uri_expiry_monthly = "gs://bba_support_files/Expiry_Date_Monthly.csv"
     df_expiry_full = pd.read_csv(uri_expiry_full)
-    df_expiry_full.style.format({"Full": lambda t: t.strftime("%d-%b-%Y")})
+    df_expiry_full['Full'] = pd.to_datetime(df_expiry_full.Full)
+    df_expiry_full['Full'] = df_expiry_full['Full'].dt.strftime('%d-%b-%Y')
     print(df_expiry_full)
+    uri_expiry_monthly = "gs://bba_support_files/Expiry_Date_Monthly.csv"
     df_expiry_monthly = pd.read_csv(uri_expiry_monthly)
+
     if expiry_togle_option == True:
         options = [{'label': x, 'value': x}
                    for x in df_expiry_full['Full']]
