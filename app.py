@@ -4,11 +4,11 @@ import dash_bootstrap_components as dbc # pip install dash-bootstrap-components
 import dash_auth
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], use_pages=True)
 
-auth = dash_auth.BasicAuth(
-    app,
-    {'biswasp87': 'hello1234',
-     'pajaroloco': 'unsecreto'}
-)
+# auth = dash_auth.BasicAuth(
+#     app,
+#     {'biswasp87': 'hello1234',
+#      'pajaroloco': 'unsecreto'}
+# )
 
 navbar = dbc.NavbarSimple(
     dbc.DropdownMenu(
