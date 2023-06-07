@@ -18,7 +18,6 @@ from google.cloud import bigquery
 from datetime import date, timedelta, datetime
 import dash_daq as daq
 
-lot_size_list = pd.read_csv("gs://bba_support_files/Lot_Size.csv")
 watchlist = pd.read_csv("gs://bba_support_files/WL_ALL.csv")
 dropdown_opt_list = pd.read_csv("gs://bba_support_files/Dropdown_options.csv")
 Expiry_Date_Monthly = pd.read_csv("gs://bba_support_files/Expiry_Date_Monthly.csv")
