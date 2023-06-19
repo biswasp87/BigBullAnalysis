@@ -2,8 +2,7 @@ import dash  # pip install dash
 import dash_bootstrap_components as dbc # pip install dash-bootstrap-components
 # Code from: https://github.com/plotly/dash-labs/tree/main/docs/demos/multi_page_example1
 import dash_auth
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], use_pages=True)
-
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CERULEAN], use_pages=True)
 auth = dash_auth.BasicAuth(
     app,
     {'biswasp87': 'hello1234',

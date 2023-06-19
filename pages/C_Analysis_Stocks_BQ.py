@@ -41,55 +41,6 @@ CONTENT_STYLE = {
     'padding': '20px 10p'
 }
 
-content_first_row = dbc.CardGroup(
-    [
-        dbc.Card(
-            dbc.CardBody(
-                [
-
-                ]
-            )
-        ),
-        dbc.Card(
-            dbc.CardBody(
-                [
-
-                    # dcc.Graph(id='graph_1', config={'displayModeBar': False})
-                ]
-            )
-        ),
-        dbc.Card(
-            dbc.CardBody(
-                [
-
-                ]
-            )
-        ),
-        dbc.Card(
-            dbc.CardBody(
-                [
-                    dbc.Row([
-                        dbc.Col([
-
-                        ]),
-                        dbc.Col([
-
-                        ])
-                            ])
-                ]
-            )
-        ),
-
-    ]
-)
-
-content_second_row = dbc.Row(
-    [
-        dbc.Col(
-
-        )
-    ]
-)
 content_third_row = dbc.Row([
     dbc.Col([dbc.Card(
         dbc.CardBody([
@@ -218,7 +169,6 @@ def update_expiry_list(expiry_togle_option):
     df_expiry_full = pd.read_csv(uri_expiry_full)
     df_expiry_full['Full'] = pd.to_datetime(df_expiry_full.Full)
     df_expiry_full['Full'] = df_expiry_full['Full'].dt.strftime('%d-%b-%Y')
-    print(df_expiry_full)
     uri_expiry_monthly = "gs://bba_support_files/Expiry_Date_Monthly.csv"
     df_expiry_monthly = pd.read_csv(uri_expiry_monthly)
 
@@ -249,13 +199,11 @@ def update_dropdown(n_clicks, n_clicks_next, dropdown_value, dropdown_opt_val):
     if trigger_id == 'submit_button':
         cur_position = wl[wl['Symbol'] == dropdown_value].index[0]
         cur_position = int(cur_position)
-        print(cur_position)
         value_analysis = wl['Symbol'].iloc[cur_position - 1]
 
     elif trigger_id == 'submit_button_next':
         cur_position = wl[wl['Symbol'] == dropdown_value].index[0]
         cur_position = int(cur_position)
-        print(cur_position)
         value_analysis = wl['Symbol'].iloc[cur_position + 1]
     else:
         value_analysis = dropdown_value
@@ -307,7 +255,6 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
                     short_sma, medium_sma, long_sma, graph_height,b_band,kc):
 
     expiry_date = datetime.strptime(dropdown_exp_value, "%d-%b-%Y").date()
-    print(expiry_date)
 
     client = bigquery.Client()
     sql_stock = f"""
@@ -329,7 +276,6 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     df_stock = df_stock.sort_values(by='TIMESTAMP', ascending=True)
     df_stock["BAR"] = df_stock["BAR"].astype(int)
     df_stock = df_stock.reset_index()
-    print(df_stock)
 
     df_stock["CLOSE_MA_S"] = df_stock["EQ_CLOSE_PRICE"].rolling(short_sma).mean()
     df_stock["CLOSE_MA_M"] = df_stock["EQ_CLOSE_PRICE"].rolling(medium_sma).mean()

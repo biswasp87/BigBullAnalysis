@@ -75,13 +75,13 @@ layout = html.Div([content])
     Input(component_id='master_data_button', component_property='n_clicks'),
 )
 def update_master_data_card(n):
-    blob_watchlist = bucket.get_blob('last_watchlist_updated_on.csv')
+    blob_watchlist = bucket.get_blob('last_Master_Data_updated_on.csv')
     if n is None:
         text_one = "Last Updated on " + str(datetime.date(blob_watchlist.updated))
         text_two = "Click on the Button for Manual Update"
         return text_one, text_two
     elif n == 1:
-        r = requests.post("https://asia-south1-phrasal-fire-373510.cloudfunctions.net/BBA_Update_Scanner_10m_opt_vol")
+        r = requests.post("https://asia-south1-phrasal-fire-373510.cloudfunctions.net/Fetch_Master_Data_To_BQ")
         r_status = r.status_code
         if r_status == 200:
             text_one = 'Updated Successfully at ' + str(datetime.date(blob_watchlist.updated))
