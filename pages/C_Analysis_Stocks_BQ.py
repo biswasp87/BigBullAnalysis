@@ -241,6 +241,7 @@ def update_dropdown(n_clicks, n_clicks_next, dropdown_value, dropdown_opt_val):
 
 @callback(
     Output('graph_31', 'figure'),
+    Output('df_indicator', 'data'),
     [Input('dropdown_exp', 'value'),
      Input('dropdown', 'value'),
      Input('dropdown_opt', 'value'),
@@ -325,11 +326,8 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     df_stock['Upper_KC'] = df_stock['SMA'] + (kc * df_stock['ATR'])      #Upper curve of the Keltner Channel
     df_stock['Lower_KC'] = df_stock['SMA'] - (kc * df_stock['ATR'])      #Lower curve
 
-    # def in_consolidation(df_stock):       #function testing if a symbol is consolidating (Bollinger Bands in Keltner Channel)
-    #     return df_stock['Lower_Bollinger'] > df_stock['Lower_KC'] and df_stock['Upper_Bollinger'] < df_stock['Upper_KC']
-
     df_stock['consolidation'] = np.where((df_stock['Lower_Bollinger'] > df_stock['Lower_KC']) & (df_stock['Upper_Bollinger'] < df_stock['Upper_KC']),"yellow","white")
-    df_stock.info(verbose=True)
+    # df_stock.info(verbose=True)
 
     try:
         df_10M_VOL = df_stock[["TIMESTAMP", "CUR_FUT_EXPIRY_DT", "NEAR_FUT_EXPIRY_DT",
@@ -361,7 +359,10 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
                                            'NEAR_PE_STRIKE_PR_10MVOL', 'NEAR_CE_STRIKE_PR_10MVOL',
                                            'ENTRY_BO', 'ENTRY_BD'])
     # ____________________________________________________________
-
+    df_10M_VOL["SYMBOL"] = df_stock["SYMBOL"].iloc[0]
+    df_store = df_10M_VOL
+    print(df_store)
+    # df_10M_VOL.to_csv("df_10m_vol.csv")
     fig = make_subplots(
         rows=14, cols=1,
         # row_heights=[0.50, 0.15, 0.1, 0.1, 0.03, 0.12],
@@ -521,4 +522,4 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     fig['layout']['yaxis5']['title'] = 'COI'
     fig['layout']['yaxis7']['title'] = 'PCR'
 
-    return fig
+    return fig, df_store.to_dict('records')

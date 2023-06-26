@@ -27,17 +27,11 @@ print(token)
 OI_exp_data = pd.DataFrame()
 Master_Spot_Data = pd.DataFrame()
 
-FPI_Investment_Equity_Exst = pd.read_csv('gs://bba_support_files/FPI_Investment_Equity.csv')
-FPI_Investment_Debt_Exst = pd.read_csv('gs://bba_support_files/FPI_Investment_Debt.csv')
+
 lot_size = pd.read_csv("gs://bba_support_files/Lot_Size.csv")
 watchlist = pd.read_csv("gs://bba_support_files/WL_ALL.csv")
 Expiry_Date_Monthly = pd.read_csv("gs://bba_support_files/Expiry_Date_Monthly.csv")
 
-FPI_Investment_Equity_Exst.drop(FPI_Investment_Equity_Exst.columns[FPI_Investment_Equity_Exst.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
-FPI_Investment_Debt_Exst.drop(FPI_Investment_Debt_Exst.columns[FPI_Investment_Debt_Exst.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
-
-FPI_Data = FPI_Investment_Equity_Exst
-FPI_Data.columns.astype(str)
 
 # the style arguments for the main content page.
 CONTENT_STYLE = {
@@ -199,7 +193,6 @@ content = html.Div(
     # style=CONTENT_STYLE
 )
 
-#app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
 layout = html.Div([content])
 
 

@@ -2,6 +2,7 @@ import dash  # pip install dash
 import dash_bootstrap_components as dbc # pip install dash-bootstrap-components
 # Code from: https://github.com/plotly/dash-labs/tree/main/docs/demos/multi_page_example1
 import dash_auth
+from dash import dcc, html
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CERULEAN], use_pages=True)
 auth = dash_auth.BasicAuth(
     app,
@@ -25,10 +26,7 @@ navbar = dbc.NavbarSimple(
     className="mb-2",
 )
 
-app.layout = dbc.Container(
-    [navbar, dash.page_container],
-    fluid=True,
-)
+app.layout = dbc.Container([dcc.Store(id="df_indicator", data=[]), navbar, dash.page_container], fluid=True)
 
 if __name__ == '__main__':
     app.run_server(debug=False, host="0.0.0.0", port=8080)
