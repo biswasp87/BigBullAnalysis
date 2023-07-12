@@ -26,7 +26,7 @@ navbar = dbc.NavbarSimple(
     className="mb-2",
 )
 
-app.layout = dbc.Container([dcc.Store(id="df_indicator", data=[]), navbar, dash.page_container], fluid=True)
+app.layout = dbc.Container([dcc.Store(id="df_indicator", data=[], storage_type='local'), navbar, dash.page_container], fluid=True)
 
 if __name__ == '__main__':
     app.run_server(debug=False, host="0.0.0.0", port=8080)
