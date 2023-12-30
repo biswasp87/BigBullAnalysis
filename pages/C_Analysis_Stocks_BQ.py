@@ -281,20 +281,25 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     df_stock["CLOSE_MA_S"] = df_stock["EQ_CLOSE_PRICE"].rolling(short_sma).mean()
     df_stock["CLOSE_MA_M"] = df_stock["EQ_CLOSE_PRICE"].rolling(medium_sma).mean()
     df_stock["CLOSE_MA_L"] = df_stock["EQ_CLOSE_PRICE"].rolling(long_sma).mean()
-    df_stock["CLOSE_MA_COL"] = np.where((df_stock["CLOSE_MA_S"] > df_stock["CLOSE_MA_M"]) & (df_stock["CLOSE_MA_M"] > df_stock["CLOSE_MA_L"]), 'green',
-                                        np.where((df_stock["CLOSE_MA_S"] < df_stock["CLOSE_MA_M"]) & (df_stock["CLOSE_MA_M"] < df_stock["CLOSE_MA_L"]),'red', 'yellow'))
-
+    # df_stock["CLOSE_MA_COL"] = np.where((df_stock["CLOSE_MA_S"] > df_stock["CLOSE_MA_M"]) & (df_stock["CLOSE_MA_M"] > df_stock["CLOSE_MA_L"]), 'green',
+    #                                     np.where((df_stock["CLOSE_MA_S"] < df_stock["CLOSE_MA_M"]) & (df_stock["CLOSE_MA_M"] < df_stock["CLOSE_MA_L"]),'red', 'white'))
+    df_stock["CLOSE_MA_COL"] = np.where((df_stock["CLOSE_MA_S"] > df_stock["CLOSE_MA_M"].shift(2)), 'green', 'white')
+    # print(df_stock["CLOSE_MA_M"])
+    # print(df_stock["CLOSE_MA_M"].shift(1))
+    # print(df_stock["CLOSE_MA_M"].shift(2))
     df_stock["VOLUME_MA_S"] = df_stock["EQ_TTL_TRD_QNTY"].rolling(short_sma).mean()
     df_stock["VOLUME_MA_M"] = df_stock["EQ_TTL_TRD_QNTY"].rolling(medium_sma).mean()
     df_stock["VOLUME_MA_L"] = df_stock["EQ_TTL_TRD_QNTY"].rolling(long_sma).mean()
-    df_stock["VOLUME_MA_COL"] = np.where((df_stock["VOLUME_MA_S"] > df_stock["VOLUME_MA_M"]) & (df_stock["VOLUME_MA_M"] > df_stock["VOLUME_MA_L"]), 'green',
-                                        np.where((df_stock["VOLUME_MA_M"] > df_stock["VOLUME_MA_S"]) & (df_stock["VOLUME_MA_M"] > df_stock["VOLUME_MA_L"]),'yellow', 'red'))
+    # df_stock["VOLUME_MA_COL"] = np.where((df_stock["VOLUME_MA_S"] > df_stock["VOLUME_MA_M"]) & (df_stock["VOLUME_MA_M"] > df_stock["VOLUME_MA_L"]), 'green',
+    #                                     np.where((df_stock["VOLUME_MA_S"] < df_stock["VOLUME_MA_M"]) & (df_stock["VOLUME_MA_M"] < df_stock["VOLUME_MA_L"]),'red', 'white'))
+    df_stock["VOLUME_MA_COL"] = np.where((df_stock["VOLUME_MA_S"] > df_stock["VOLUME_MA_M"].shift(2)), 'green', 'white')
 
     df_stock["DEL_MA_S"] = df_stock["EQ_DELIV_QTY"].rolling(short_sma).mean()
     df_stock["DEL_MA_M"] = df_stock["EQ_DELIV_QTY"].rolling(medium_sma).mean()
     df_stock["DEL_MA_L"] = df_stock["EQ_DELIV_QTY"].rolling(long_sma).mean()
-    df_stock["DEL_MA_COL"] = np.where((df_stock["DEL_MA_S"] > df_stock["DEL_MA_M"]) & (df_stock["DEL_MA_M"] > df_stock["DEL_MA_L"]), 'green',
-                                        np.where((df_stock["DEL_MA_M"] > df_stock["DEL_MA_S"]) & (df_stock["DEL_MA_M"] > df_stock["DEL_MA_L"]),'yellow', 'red'))
+    # df_stock["DEL_MA_COL"] = np.where((df_stock["DEL_MA_S"] > df_stock["DEL_MA_M"]) & (df_stock["DEL_MA_M"] > df_stock["DEL_MA_L"]), 'green',
+    #                                     np.where((df_stock["DEL_MA_M"] > df_stock["DEL_MA_S"]) & (df_stock["DEL_MA_M"] > df_stock["DEL_MA_L"]),'yellow', 'red'))
+    df_stock["DEL_MA_COL"] = np.where((df_stock["DEL_MA_S"] > df_stock["DEL_MA_M"].shift(2)), 'green', 'white')
 
     df_stock["DEL_PER_MA_S"] = ((df_stock["EQ_TTL_TRD_QNTY"].rolling(short_sma).sum() /
                                 df_stock["EQ_DELIV_QTY"].rolling(short_sma).sum())*100).round(1)
@@ -302,21 +307,23 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
                                 df_stock["EQ_DELIV_QTY"].rolling(medium_sma).sum())*100).round(1)
     df_stock["DEL_PER_MA_L"] = ((df_stock["EQ_TTL_TRD_QNTY"].rolling(long_sma).sum() /
                                 df_stock["EQ_DELIV_QTY"].rolling(long_sma).sum())*100).round(1)
-    df_stock["DEL_PER_MA_COL"] = np.where((df_stock["DEL_PER_MA_S"] > df_stock["DEL_PER_MA_M"]) & (df_stock["DEL_PER_MA_M"] > df_stock["DEL_PER_MA_L"]), 'green',
-                                        np.where((df_stock["DEL_PER_MA_M"] > df_stock["DEL_PER_MA_S"]) & (df_stock["DEL_PER_MA_M"] > df_stock["DEL_PER_MA_L"]),'yellow', 'red'))
+    # df_stock["DEL_PER_MA_COL"] = np.where((df_stock["DEL_PER_MA_S"] > df_stock["DEL_PER_MA_M"]) & (df_stock["DEL_PER_MA_M"] > df_stock["DEL_PER_MA_L"]), 'green',
+    #                                     np.where((df_stock["DEL_PER_MA_M"] > df_stock["DEL_PER_MA_S"]) & (df_stock["DEL_PER_MA_M"] > df_stock["DEL_PER_MA_L"]),'yellow', 'red'))
+    df_stock["DEL_PER_MA_COL"] = np.where((df_stock["DEL_PER_MA_S"] < df_stock["DEL_PER_MA_M"].shift(2)), 'red', 'white')
 
     df_stock["QT_MA_S"] = df_stock["EQ_QT"].rolling(short_sma).mean()
     df_stock["QT_MA_M"] = df_stock["EQ_QT"].rolling(medium_sma).mean()
     df_stock["QT_MA_L"] = df_stock["EQ_QT"].rolling(long_sma).mean()
-    df_stock["QT_MA_COL"] = np.where((df_stock["QT_MA_S"] > df_stock["QT_MA_M"]) & (df_stock["QT_MA_M"] > df_stock["QT_MA_L"]), 'green',
-                                        np.where((df_stock["QT_MA_M"] > df_stock["QT_MA_S"]) & (df_stock["QT_MA_M"] > df_stock["QT_MA_L"]),'yellow', 'red'))
+    # df_stock["QT_MA_COL"] = np.where((df_stock["QT_MA_S"] > df_stock["QT_MA_M"]) & (df_stock["QT_MA_M"] > df_stock["QT_MA_L"]), 'green',
+    #                                     np.where((df_stock["QT_MA_M"] > df_stock["QT_MA_S"]) & (df_stock["QT_MA_M"] > df_stock["QT_MA_L"]),'yellow', 'red'))
+    df_stock["QT_MA_COL"] = np.where((df_stock["QT_MA_S"] > df_stock["QT_MA_M"].shift(2)), 'green', 'white')
 
     df_stock["FUT_BUILD_UP_COL"] = np.where(((df_stock["FUT_BUILD_UP"] == "LB") | (df_stock["FUT_BUILD_UP"] == "SC")), 'green', 'red')
     df_stock["PCR_MA_COL"] = np.where(df_stock["CUR_PCR"] >= 110, 'green',
                                        np.where((df_stock["CUR_PCR"] < 110) & (df_stock["CUR_PCR"] > 80), 'yellow', 'red'))
     # Consolidation Phase
-    df_stock['SMA'] = df_stock['EQ_CLOSE_PRICE'].rolling(window = long_sma).mean()     #Simple Moving Average calculation (period = 20)
-    df_stock['stdev'] = df_stock['EQ_CLOSE_PRICE'].rolling(window = long_sma).std()    #Standard Deviation calculation
+    df_stock['SMA'] = df_stock['EQ_CLOSE_PRICE'].rolling(window=long_sma).mean()     #Simple Moving Average calculation (period = 20)
+    df_stock['stdev'] = df_stock['EQ_CLOSE_PRICE'].rolling(window=long_sma).std()    #Standard Deviation calculation
     df_stock['Lower_Bollinger'] = df_stock['SMA'] - (b_band * df_stock['stdev'])   #Calculation of the lower curve of the Bollinger Bands
     df_stock['Upper_Bollinger'] = df_stock['SMA'] + (b_band * df_stock['stdev'])   #Upper curve
 
@@ -328,6 +335,7 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
 
     df_stock['consolidation'] = np.where((df_stock['Lower_Bollinger'] > df_stock['Lower_KC']) & (df_stock['Upper_Bollinger'] < df_stock['Upper_KC']),"yellow","white")
     # df_stock.info(verbose=True)
+    df_stock.to_csv("df_stock.csv")
     # print(df_store)
 
     try:
