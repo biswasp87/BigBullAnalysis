@@ -335,7 +335,7 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
 
     df_stock['consolidation'] = np.where((df_stock['Lower_Bollinger'] > df_stock['Lower_KC']) & (df_stock['Upper_Bollinger'] < df_stock['Upper_KC']),"yellow","white")
     # df_stock.info(verbose=True)
-    df_stock.to_csv("df_stock.csv")
+    # df_stock.to_csv("df_stock.csv")
     # print(df_store)
 
     try:
@@ -540,5 +540,9 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     fig['layout']['yaxis4']['title'] = 'Q/T'
     fig['layout']['yaxis5']['title'] = 'COI'
     fig['layout']['yaxis7']['title'] = 'PCR'
+    LTP=df_stock['EQ_CLOSE_PRICE'].iloc[-1]
+    LTP_PREV=df_stock['EQ_CLOSE_PRICE'].iloc[-2]
+    PER_CHNG=((LTP-LTP_PREV)/LTP*100).round(1)
+    fig.update_layout(xaxis_title=dropdown_value+str(" LTP: ")+str(LTP)+str(" Change: ")+str(PER_CHNG)+str("%"))
 
     return fig, df_store.to_dict('records')
