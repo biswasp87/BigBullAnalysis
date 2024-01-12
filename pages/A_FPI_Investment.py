@@ -13,11 +13,6 @@ from dash import html
 from dash import dash_table as dt
 import pandas as pd
 
-
-# Declaring DataFrames
-OI_exp_data = pd.DataFrame()
-Master_Spot_Data = pd.DataFrame()
-
 FPI_Investment_Equity_Exst = pd.read_csv('gs://bba_support_files/FPI_Investment_Equity.csv')
 FPI_Investment_Debt_Exst = pd.read_csv('gs://bba_support_files/FPI_Investment_Debt.csv')
 

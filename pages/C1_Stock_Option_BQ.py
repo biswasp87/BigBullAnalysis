@@ -175,7 +175,7 @@ content_first_row = dbc.Row([
 
 content = html.Div(
     [
-        content_first_row,
+        html.Br(), content_first_row,
     ]
 )
 

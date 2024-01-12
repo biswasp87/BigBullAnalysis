@@ -147,7 +147,7 @@ content = html.Div(
 )
 
 
-layout = html.Div([content])
+layout = html.Div([html.Br(), content])
 
 
 @callback(
@@ -156,9 +156,10 @@ layout = html.Div([content])
 def update_dropdown_list(dropdown_item_value):
     dir_wl = "gs://bba_support_files/" + dropdown_item_value + '.csv'
     wl = pd.read_csv(dir_wl)
-    options = [{'label': x, 'value': x}
-               for x in wl['Symbol']]
+    options = [{'label': x, 'value': x} for x in wl['Symbol']]
     return options
+
+
 
 @callback(
     Output('dropdown_exp', 'options'),
@@ -208,36 +209,6 @@ def update_dropdown(n_clicks, n_clicks_next, dropdown_value, dropdown_opt_val):
     else:
         value_analysis = dropdown_value
     return value_analysis
-
-
-
-# @callback(
-#     Output('graph_1', 'figure'),
-#     [Input('dropdown_exp', 'value'),
-#      Input('dropdown', 'value')])
-# def update_graph_1(dropdown_exp_value, dropdown_value):
-#     print(dropdown_value)
-#     print(dropdown_exp_value)
-#
-#     df_eq_g1 = pd.read_csv(os.path.join(equity_folder_path, (dropdown_value + ".csv")))  # Fetch Equity master Data and filter by Stock Name
-#     spot_price = df_eq_g1['CLOSE'].iloc[-1]  # Find the Spot price as per last Closing
-#     prev_price = df_eq_g1['CLOSE'].iloc[-2]  # Find the Previous Day price as per Closing
-#
-#     fig_g1 = go.Figure()
-#     fig_g1.add_trace(go.Indicator(
-#         mode="number+delta",
-#         value=spot_price,
-#         delta={'reference': prev_price, 'relative': True},
-#     ))
-#     fig_g1.update_traces(delta_font={'size': 15})
-#     fig_g1.update_traces(number_font_size=15, selector=dict(type='indicator'))
-#     fig_g1.update_traces(delta_position='left', selector=dict(type='indicator'))
-#     fig_g1.update_traces(number_prefix='Close ', selector=dict(type='indicator'))
-#     fig_g1.update_traces(align='left', selector=dict(type='indicator'))
-#     fig_g1.update_layout(height=20, width=150)
-#     fig_g1.update_layout(margin_l=0)
-#     return fig_g1
-
 
 @callback(
     Output('graph_31', 'figure'),
@@ -367,25 +338,22 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
                                            'CUR_PE_STRIKE_PR_10MVOL', 'CUR_CE_STRIKE_PR_10MVOL',
                                            'NEAR_PE_STRIKE_PR_10MVOL', 'NEAR_CE_STRIKE_PR_10MVOL',
                                            'ENTRY_BO', 'ENTRY_BD'])
-    # ____________________________________________________________
-    # df_10M_VOL["SYMBOL"] = df_stock["SYMBOL"].iloc[-1]
-    # df_10M_VOL["CLOSE_VALUE"] = df_stock["EQ_CLOSE_PRICE"].iloc[-1]
-    # df_store = df_10M_VOL
-    # print(df_store)
-    # df_10M_VOL.to_csv("df_10m_vol.csv")
+
     df_store = df_stock.iloc[[-1]]
     if not df_10M_VOL.empty:
         df_store["10M_VOL_TIMESTAMP"] = df_10M_VOL['TIMESTAMP'].iloc[0]
-        # df_store["10M_VOL_HIGH"] = df_10M_VOL['HIGH'].iloc[0]
-        # df_store["10M_VOL_LOW"] = df_10M_VOL['LOW'].iloc[0]
     else:
         df_store["10M_VOL_TIMESTAMP"] = 'NA'
-        # df_store["10M_VOL_HIGH"] = 'NA'
-        # df_store["10M_VOL_LOW"] = 'NA'
+
+    if graph_height[0] == 800:
+        row_height_values = [0.505, 0.075, 0.075, 0.075, 0.02, 0.09, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02,
+                             0.02]
+    else:
+        row_height_values = [0.38, 0.09, 0.085, 0.085, 0.03, 0.09, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03]
+
     fig = make_subplots(
         rows=14, cols=1,
-        # row_heights=[0.50, 0.15, 0.1, 0.1, 0.03, 0.12],
-        row_heights=[0.38, 0.09, 0.085, 0.085, 0.03, 0.09, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03],
+        row_heights=row_height_values,
         specs=[[{}], [{"secondary_y": True}], [{}], [{}], [{}], [{"secondary_y": True}], [{}], [{}], [{}], [{}], [{}], [{}], [{}], [{}]],
         print_grid=True, shared_xaxes=True, horizontal_spacing=0.05, vertical_spacing=0)
 

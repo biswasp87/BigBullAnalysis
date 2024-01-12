@@ -13,25 +13,6 @@ auth = dash_auth.BasicAuth(
      'test': 'test'}
 )
 
-# navbar = dbc.NavbarSimple(
-#     children=[
-#         dbc.NavItem(dbc.NavLink("Home", href="/a-fpi-investment")),
-#         dbc.DropdownMenu(
-#             [
-#                 dbc.DropdownMenuItem(page["name"], href=page["path"])
-#                 for page in dash.page_registry.values()
-#                 if page["module"] != "pages.not_found_404"
-#             ],
-#             nav=True,
-#             label="Analysis",
-#         ),
-#     ],
-#     brand="BigBull Analysis",
-#     color="primary",
-#     dark=True,
-#     className="mb-2",
-# )
-
 navbar = dbc.Navbar(
     dbc.Container(
         [
@@ -50,6 +31,7 @@ navbar = dbc.Navbar(
                     dbc.Nav([
                         dbc.NavItem(dbc.NavLink("Home", href="/")),
                         dbc.NavItem(dbc.NavLink("FPI Investment", href="/a-fpi-investment")),
+                        dbc.NavItem(dbc.NavLink("Scanner", href="/b-scanner")),
                         dbc.NavItem(dbc.DropdownMenu(
                             children=[
                                 dbc.DropdownMenuItem("Nifty", href="/hownnlearns"),
@@ -123,7 +105,8 @@ def toggle_navbar_collapse(n, is_open):
         return not is_open
     return is_open
 
-app.layout = dbc.Container([dcc.Store(id="df_indicator", data=[], storage_type='local'), navbar, dash.page_container], fluid=True)
+app.layout = dbc.Container([dcc.Store(id="df_indicator", data=[], storage_type='local'),
+                            navbar, dash.page_container], fluid=True)
 
 if __name__ == '__main__':
     app.run_server(debug=False, host="0.0.0.0", port=8080)

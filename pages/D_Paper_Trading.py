@@ -193,7 +193,7 @@ content = html.Div(
     # style=CONTENT_STYLE
 )
 
-layout = html.Div([content])
+layout = html.Div([html.Br(), content])
 
 
 @callback(
