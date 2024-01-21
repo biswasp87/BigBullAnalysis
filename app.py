@@ -31,7 +31,16 @@ navbar = dbc.Navbar(
                     dbc.Nav([
                         dbc.NavItem(dbc.NavLink("Home", href="/")),
                         dbc.NavItem(dbc.NavLink("FPI Investment", href="/a-fpi-investment")),
-                        dbc.NavItem(dbc.NavLink("Scanner", href="/b-scanner")),
+                        dbc.NavItem(dbc.DropdownMenu(
+                            children=[
+                                dbc.DropdownMenuItem("FNO Scanner", href="/b-scanner", external_link=True, target='_blank'),
+                                dbc.DropdownMenuItem("Non FNO Scanner", href="/non_fno_scanner", external_link=True,
+                                                     target='_blank'),
+                            ],
+                            nav=True,
+                            in_navbar=True,
+                            label="Scanner",
+                        )),
                         dbc.NavItem(dbc.DropdownMenu(
                             children=[
                                 dbc.DropdownMenuItem("Nifty", href="/hownnlearns"),
@@ -42,12 +51,10 @@ navbar = dbc.Navbar(
                             in_navbar=True,
                             label="Index Analysis",
                         )),
-                        # dbc.NavItem(dbc.NavLink("Settings", href="/dashboard")),
                         dbc.NavItem(dbc.DropdownMenu(
                             children=[
-                                # dbc.DropdownMenuItem("FNO", header=True),
-                                dbc.DropdownMenuItem("FNO Stock", href="/c-analysis-stocks-bq"),
-                                dbc.DropdownMenuItem("FNO Option", href="/c1-stock-option-bq")
+                                dbc.DropdownMenuItem("FNO Stock", href="/c-analysis-stocks-bq", external_link=True, target='_blank'),
+                                dbc.DropdownMenuItem("FNO Option", href="/c1-stock-option-bq", external_link=True, target='_blank'),
                             ],
                             nav=True,
                             in_navbar=True,

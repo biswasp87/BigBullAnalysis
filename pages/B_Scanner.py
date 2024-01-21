@@ -1,4 +1,6 @@
 import dash
+from google.cloud import bigquery
+
 # To create meta tag for each page, define the title, image, and description.
 dash.register_page(
     __name__,
@@ -7,27 +9,27 @@ dash.register_page(
     name='All Scanner'
 )
 
-from dash import Dash, dcc, html, Input, Output, callback
+from dash import Dash, dcc, Input, Output, callback
 import dash_bootstrap_components as dbc
 from dash import html
 from dash import dash_table as dt
-import pandas as pd
-import dash_ag_grid as dag
 from google.cloud import storage
 
-scanner = pd.read_csv('gs://biswasp87/Scanner.csv')
+# scanner = pd.read_csv('gs://biswasp87/Scanner.csv')
+# ___________________________________________________________________________________________________
+# Import Data From Big Querry
+# ___________________________________________________________________________________________________
+client = bigquery.Client()
+sql_stock = f""" SELECT * FROM `phrasal-fire-373510.Scanner_Data.FNO_Scanner` """
+scanner = client.query(sql_stock).to_dataframe()
 scanner.drop(scanner.columns[scanner.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
 scanner.columns.astype(str)
-scanner['id'] = scanner['SYMBOL']
+scanner['id'] = scanner['SYMBOL'] # For selecting Symbols to pust it to watchlist
 scanner.set_index('id', inplace=True, drop=False)
 
-# the style arguments for the main content page.
-CONTENT_STYLE = {
-    'margin-left': '2%',
-    'margin-right': '5%',
-    'padding': '20px 10p'
-}
-
+# ___________________________________________________________________________________________________
+# Defining Layout of FNO Scanner Page and displaying the Data Table
+# ___________________________________________________________________________________________________
 content_first_row = dbc.CardGroup(
     [
         dbc.Card(
@@ -47,7 +49,7 @@ content_first_row = dbc.CardGroup(
 content_second_row = dbc.Row(
     [
         dbc.Col(
-                html.Br()
+                html.Br(),
         )
     ]
 )
@@ -99,59 +101,19 @@ content_third_row = dt.DataTable(id="scanner_table",
                                     ]
                                 )
 
-# columnDefs = [
-#     {"field": "SYMBOL", "checkboxSelection": True, "headerCheckboxSelection": True},
-#     {"field": "NR4"},
-#     {"field": "NR7"},
-#     {"field": "BUL_REV"},
-#     {"field": "BER_REV"},
-#     {"field": "CONSOLIDATION"},
-#     {"field": "VOLUME"},
-#     {"field": "DEL"},
-#     {"field": "DEL_PER"},
-#     {"field": "QT"},
-#     {"field": "COI"},
-#     {"field": "PCR_T"},
-#     {"field": "PCR_VAL"},
-#     {"field": "10M_CE"},
-#     {"field": "10M_CE_NOS"},
-#     {"field": "10M_PE"},
-#     {"field": "10M_PE_NOS"},
-#     {"field": "R_DIST"},
-#     {"field": "S_DIST"},
-# ]
-#
-# defaultColDef = {
-#     "sortable": True,
-#     "resizable": True,
-#     "editable": True,
-#     "filter": True,
-#     "floatingFilter": True
-# }
-#
-# content_fourth_row = html.Div([
-#                             dag.AgGrid(
-#                                 id="scanner_table_ag_grid",
-#                                 columnDefs=columnDefs,
-#                                 rowData=scanner.to_dict("records"),
-#                                 columnSize="sizeToFit",
-#                                 defaultColDef=defaultColDef,
-#                                 dashGridOptions={"rowSelection":"multiple"},
-#                                 getRowId="params.data.id",
-#                                     )
-# ])
 content = html.Div(
     [
         html.Br(),
         content_first_row,
         content_second_row,
         content_third_row,
-        # content_fourth_row,
     ],
 )
 
 layout = html.Div([dcc.Store(id="filtered_scanner_df", data=[], storage_type='local'), content])
-# Extract Selected Row Values and Save it to Cloud Storage on Clicking the Button
+# ___________________________________________________________________________________________________
+# Button Function to Push the Selected Symbol to Scanner Watchlist
+# ___________________________________________________________________________________________________
 @callback(
     # Output('scanner_table_ag_grid', "rowData"),
     Output('filtered_scanner_df', "data"),
@@ -169,7 +131,7 @@ def update_graphs(row_ids, selected_row_ids,n_clicks):
         dff = scanner.loc[selected_row_ids]
 
     dff.rename(columns={'SYMBOL': 'Symbol'}, inplace=True)
-    print(dff)
+    # print(dff)
 
     ctx = dash.callback_context
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
@@ -184,3 +146,12 @@ def update_graphs(row_ids, selected_row_ids,n_clicks):
             pass
     dff.rename(columns={'Symbol': 'SYMBOL'}, inplace=True)
     return dff.to_dict('records')
+
+# ___________________________________________________________________________________________________
+# Callback to Fetch Last Updated Time
+# ___________________________________________________________________________________________________
+# @callback(Output("Table_Last_Updated", "children"))
+# def update_statusBar():
+#     table_id = "phrasal-fire-373510.Scanner_Data.FNO_Scanner"
+#     table = client.get_table(table_id)  # Make an API request.
+#     print("Last Updated on: {}".format(table.modified))
