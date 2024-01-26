@@ -14,18 +14,29 @@ import dash_bootstrap_components as dbc
 from dash import html
 from dash import dash_table as dt
 from google.cloud import storage
+import pandas as pd
 
 # scanner = pd.read_csv('gs://biswasp87/Scanner.csv')
+scanner = pd.DataFrame()
 # ___________________________________________________________________________________________________
 # Import Data From Big Querry
 # ___________________________________________________________________________________________________
-client = bigquery.Client()
-sql_stock = f""" SELECT * FROM `phrasal-fire-373510.Scanner_Data.FNO_Scanner` """
-scanner = client.query(sql_stock).to_dataframe()
-scanner.drop(scanner.columns[scanner.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
-scanner.columns.astype(str)
-scanner['id'] = scanner['SYMBOL'] # For selecting Symbols to pust it to watchlist
-scanner.set_index('id', inplace=True, drop=False)
+@callback(
+    Output('scanner_table', "columns"),
+    Output('scanner_table', "data"),
+    Input('scanner_button', 'n_clicks'))
+def fetch_scanner_data_from_bq(n_clicks):
+    print(n_clicks)
+    client = bigquery.Client()
+    sql_stock = f""" SELECT * FROM `phrasal-fire-373510.Scanner_Data.FNO_Scanner` """
+    scanner = client.query(sql_stock).to_dataframe()
+    scanner.drop(scanner.columns[scanner.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
+    scanner.columns.astype(str)
+    scanner['id'] = scanner['SYMBOL'] # For selecting Symbols to pust it to watchlist
+    scanner.set_index('id', inplace=True, drop=False)
+    # print("Hi")
+    # print(scanner)
+    return [{'name': i, 'id': i, 'deletable': True} for i in scanner.columns if i != 'id'], scanner.to_dict('records')
 
 # ___________________________________________________________________________________________________
 # Defining Layout of FNO Scanner Page and displaying the Data Table
@@ -55,8 +66,8 @@ content_second_row = dbc.Row(
 )
 
 content_third_row = dt.DataTable(id="scanner_table",
-                                    columns=[{'name': i, 'id': i, 'deletable': True} for i in scanner.columns if i != 'id'],
-                                    data=scanner.to_dict('records'),
+                                    # columns=[{'name': i, 'id': i, 'deletable': True} for i in scanner.columns if i != 'id'],
+                                    # data=scanner.to_dict('records'),
                                     editable=True,
                                     filter_action="native",
                                     sort_action="native",
@@ -111,6 +122,7 @@ content = html.Div(
 )
 
 layout = html.Div([dcc.Store(id="filtered_scanner_df", data=[], storage_type='local'), content])
+
 # ___________________________________________________________________________________________________
 # Button Function to Push the Selected Symbol to Scanner Watchlist
 # ___________________________________________________________________________________________________
@@ -122,9 +134,8 @@ layout = html.Div([dcc.Store(id="filtered_scanner_df", data=[], storage_type='lo
     Input('scanner_button', 'n_clicks'))
 
 def update_graphs(row_ids, selected_row_ids,n_clicks):
-    print(row_ids)
-    print(selected_row_ids)
-
+    # print(row_ids)
+    # print(selected_row_ids)
     if selected_row_ids is None:
         dff = scanner
     else:
