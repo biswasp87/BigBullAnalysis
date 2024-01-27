@@ -24,6 +24,7 @@ scanner = pd.DataFrame()
 @callback(
     Output('scanner_table', "columns"),
     Output('scanner_table', "data"),
+    Output('intermediate_df', 'data'),
     Input('scanner_button', 'n_clicks'))
 def fetch_scanner_data_from_bq(n_clicks):
     print(n_clicks)
@@ -36,7 +37,7 @@ def fetch_scanner_data_from_bq(n_clicks):
     scanner.set_index('id', inplace=True, drop=False)
     # print("Hi")
     # print(scanner)
-    return [{'name': i, 'id': i, 'deletable': True} for i in scanner.columns if i != 'id'], scanner.to_dict('records')
+    return [{'name': i, 'id': i, 'deletable': True} for i in scanner.columns if i != 'id'], scanner.to_dict('records'), scanner.to_json(date_format='iso', orient='split')
 
 # ___________________________________________________________________________________________________
 # Defining Layout of FNO Scanner Page and displaying the Data Table
@@ -118,24 +119,27 @@ content = html.Div(
         content_first_row,
         content_second_row,
         content_third_row,
+        html.P(id='table_status', children="hi"),
     ],
 )
 
-layout = html.Div([dcc.Store(id="filtered_scanner_df", data=[], storage_type='local'), content])
+layout = html.Div([dcc.Store(id="intermediate_df", data=[], storage_type='local'), content])
 
 # ___________________________________________________________________________________________________
 # Button Function to Push the Selected Symbol to Scanner Watchlist
 # ___________________________________________________________________________________________________
 @callback(
     # Output('scanner_table_ag_grid', "rowData"),
-    Output('filtered_scanner_df', "data"),
+    Output('table_status', "data"),
     Input('scanner_table', "derived_virtual_row_ids"),
     Input('scanner_table', "selected_row_ids"),
-    Input('scanner_button', 'n_clicks'))
+    Input('scanner_button', 'n_clicks'),
+    Input('intermediate_df', 'data'))
 
-def update_graphs(row_ids, selected_row_ids,n_clicks):
+def update_graphs(row_ids, selected_row_ids,n_clicks, intermidiate_df):
     # print(row_ids)
     # print(selected_row_ids)
+    scanner = pd.read_json(intermidiate_df, orient='split')
     if selected_row_ids is None:
         dff = scanner
     else:
@@ -156,7 +160,8 @@ def update_graphs(row_ids, selected_row_ids,n_clicks):
         except Exception:
             pass
     dff.rename(columns={'Symbol': 'SYMBOL'}, inplace=True)
-    return dff.to_dict('records')
+    # return dff.to_dict('records')
+    return "Hello"
 
 # ___________________________________________________________________________________________________
 # Callback to Fetch Last Updated Time
