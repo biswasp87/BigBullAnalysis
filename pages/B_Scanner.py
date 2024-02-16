@@ -96,7 +96,7 @@ content_third_row = dt.DataTable(id="scanner_table",
                                     [
                                          {
                                              'if': {'column_id': field_name,
-                                                    'filter_query': '{' + field_name + '}' + ' < 0'},
+                                                    'filter_query': '{' + field_name + '}' + ' == W'},
                                              'backgroundColor': '#FF4136',
                                              'color': 'white'
                                          } for field_name in scanner.columns
@@ -166,7 +166,7 @@ def update_graphs(row_ids, selected_row_ids,n_clicks, intermidiate_df):
 # ___________________________________________________________________________________________________
 # Callback to Fetch Last Updated Time
 # ___________________________________________________________________________________________________
-# @callback(Output("Table_Last_Updated", "children"))
+# @callback(Output("table_status", "children"))
 # def update_statusBar():
 #     table_id = "phrasal-fire-373510.Scanner_Data.FNO_Scanner"
 #     table = client.get_table(table_id)  # Make an API request.

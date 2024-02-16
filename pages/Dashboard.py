@@ -24,9 +24,15 @@ first_card_content = [
     dbc.CardHeader("Master Data"),
     dbc.CardBody(
         [
-            html.H5(className="card-title", id='master_data_heading'),
-            html.P(className="card-text", id='master_data_para'),
-            dbc.Button("Update Now", color="primary", id='master_data_button'),
+            dbc.Row([
+                dbc.Col([
+                    html.H5(className="card-title", id='master_data_heading'),
+                    html.P(className="card-text", id='master_data_para'),
+                ]),
+                dbc.Col(
+                    dbc.Button("Update Now", color="primary", id='master_data_button'),
+                ),
+            ])
         ]
     ),
 ]
@@ -34,9 +40,15 @@ second_card_content = [
     dbc.CardHeader("Watchlist"),
     dbc.CardBody(
         [
-            html.H5(className="card-title", id='watchlist_data_heading'),
-            html.P(className="card-text", id='watchlist_data_para'),
-            dbc.Button("Update Now", color="primary", id='watchlist_data_button'),
+            dbc.Row([
+                dbc.Col([
+                    html.H5(className="card-title", id='watchlist_data_heading'),
+                    html.P(className="card-text", id='watchlist_data_para'),
+                ]),
+                dbc.Col(
+                    dbc.Button("Update Now", color="primary", id='watchlist_data_button'),
+                )
+            ])
         ]
     ),
 ]
@@ -44,13 +56,28 @@ third_card_content = [
     dbc.CardHeader("Scanner"),
     dbc.CardBody(
         [
-            html.H5(className="card-title", id='scanner_data_heading'),
-            html.P(className="card-text", id='scanner_data_para'),
-            dbc.Button("Update Now", color="primary", id='scanner_data_button'),
+            dbc.Row([
+                dbc.Col([
+                    html.H5(className="card-title", id='scanner_data_heading'),
+                    html.P(className="card-text", id='scanner_data_para'),
+                ]),
+                dbc.Col(
+                    dbc.Button("Update Now", color="primary", id='scanner_data_button'),
+                ),
+            ]),
         ]
     ),
 ]
-content_first_row = dbc.Row(
+content_first_row = dbc.Carousel(
+    items=[
+        {"key": "1", "src": "/assets/Image_1.jpg", "img_style": {"height": "650px"}},
+        {"key": "2", "src": "/assets/Image_2.jpg", "img_style": {"height": "650px"}},
+    ],
+    controls=True,
+    indicators=True,
+)
+
+content_second_row = dbc.Row(
     [
         dbc.Col(dbc.Card(first_card_content, color="info", inverse=True)),
         dbc.Col(dbc.Card(second_card_content, color="info", inverse=True)),
@@ -63,6 +90,8 @@ content = html.Div(
     [
         html.Br(),
         content_first_row,
+        html.Br(),
+        content_second_row,
     ],
 )
 
@@ -135,7 +164,7 @@ def update_scanner_data_card(n):
         text_two = "Click on the Button for Manual Update"
         return text_one, text_two
     elif n == 1:
-        r = requests.post("https://asia-south1-phrasal-fire-373510.cloudfunctions.net/BBA_Update_Scanner_10m_opt_vol")
+        r = requests.post("https://asia-south1-phrasal-fire-373510.cloudfunctions.net/FNO_Scanner")
         r_status = r.status_code
         if r_status == 200:
             text_one = 'Updated Successfully at ' + str(datetime.date(blob_scanner.updated))

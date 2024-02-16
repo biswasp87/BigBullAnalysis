@@ -20,7 +20,7 @@ import dash_daq as daq
 
 watchlist = pd.read_csv("gs://bba_support_files/WL_ALL.csv")
 dropdown_opt_list = pd.read_csv("gs://bba_support_files/Dropdown_options.csv")
-Expiry_Date_Monthly = pd.read_csv("gs://bba_support_files/Expiry_Date_Monthly.csv")
+Expiry_Date_Monthly = pd.read_csv("gs://bba_support_files/stock_expiry_dates.csv")
 
 # the style arguments for the sidebar.
 SIDEBAR_STYLE = {
@@ -35,18 +35,18 @@ SIDEBAR_STYLE = {
 }
 
 # the style arguments for the main content page.
-CONTENT_STYLE = {
-    'margin-left': '2%',
-    'margin-right': '5%',
-    'padding': '20px 10p'
-}
+# CONTENT_STYLE = {
+#     'margin-left': '2%',
+#     'margin-right': '5%',
+#     'padding': '20px 10p'
+# }
 
 content_third_row = dbc.Row([
     dbc.Col([dbc.Card(
         dbc.CardBody([
             dcc.Graph(id='graph_31', config=dict({'scrollZoom': True}))
         ])
-    )], width=10),
+    )], lg=10, xs=12, sm=12),
     dbc.Col([
         dbc.Card(
             dbc.CardBody(
@@ -58,92 +58,125 @@ content_third_row = dbc.Row([
                                  for x in dropdown_opt_list.DRP_OPT],
                         value=dropdown_opt_list.DRP_OPT[0],  # default value
                         multi=False,
+                        optionHeight=25,
                     ),
                     html.H6("Select Stock"),
-                    dcc.Dropdown(
-                        id='dropdown',
-                        options=[{'label': x, 'value': x}
-                                 for x in watchlist.Symbol],
-                        value='TATAMOTORS',  # default value
-                        maxHeight=150,
-                    ),
-                    html.H6("Select Expiry"),
-                    daq.BooleanSwitch(
-                        id="expiry_selection",
-                        on=False,
-                    ),
-                    dcc.Dropdown(
-                        id='dropdown_exp',
-                        options=[{'label': x, 'value': x}
-                                 for x in Expiry_Date_Monthly.Monthly],
-                        value=Expiry_Date_Monthly.Monthly[0],  # default value
-                        multi=False,
-                        maxHeight=150,
-                    ),
-                    html.H6("Select No. of days"),
-                    dcc.Dropdown(
-                        id='dropdown_n_days',
-                        options=[{'label': 7, 'value': 7},
-                                 {'label': 15, 'value': 15},
-                                 {'label': 30, 'value': 30},
-                                 {'label': 60, 'value': 60},
-                                 {'label': 90, 'value': 90}],
-                        value=30,  # default value
-                        multi=False,
-                        maxHeight=150,
-                    ),
-                    html.H6("Pre / Next Stock"),
-                    dbc.ButtonGroup([
-                        dbc.Button(
-                            id='submit_button',
-                            n_clicks=0,
-                            children='Prev',
-                            # color='primary',
-                            # className="ml-0",
-                            # size='sm',
+                    dbc.Row([
+                        dbc.Col(
+                            dcc.Dropdown(
+                                id='dropdown',
+                                options=[{'label': x, 'value': x}
+                                         for x in watchlist.Symbol],
+                                value='TATAMOTORS',  # default value
+                                maxHeight=150,
+                            ),
                         ),
-                        dbc.Button(
-                            id='submit_button_next',
-                            n_clicks=0,
-                            children='Next',
-                            # color='primary',
-                            # className="ml-0",
-                            # size='sm'
+                        dbc.Col(
+                            dbc.ButtonGroup([
+                                dbc.Button(
+                                    id='submit_button',
+                                    n_clicks=0,
+                                    children='Prev',
+                                    # color='primary',
+                                    # className="ml-0",
+                                    # size='sm',
+                                ),
+                                dbc.Button(
+                                    id='submit_button_next',
+                                    n_clicks=0,
+                                    children='Next',
+                                    # color='primary',
+                                    # className="ml-0",
+                                    # size='sm'
+                                ),
+                            ], size='md'),
+                        )
+                    ]),
+                    # html.H6("Select Expiry"),
+                    # daq.BooleanSwitch(
+                    #     id="expiry_selection",
+                    #     on=False,
+                    # ),
+                    dbc.Row([
+                        dbc.Col(
+                            dcc.Dropdown(
+                                id='dropdown_exp',
+                                options=[{'label': x, 'value': x}
+                                         for x in Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT],
+                                value=Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT[1],  # default value
+                                multi=False,
+                                maxHeight=150,
+                            ),
                         ),
-                    ], size='md'),
+                        dbc.Col(
+                            # html.H6("Select No. of days"),
+                            dcc.Dropdown(
+                                id='dropdown_n_days',
+                                options=[{'label': 7, 'value': 7},
+                                         {'label': 15, 'value': 15},
+                                         {'label': 30, 'value': 30},
+                                         {'label': 60, 'value': 60},
+                                         {'label': 90, 'value': 90},
+                                         {'label': 120, 'value': 120},
+                                         {'label': 150, 'value': 150}],
+                                value=60,  # default value
+                                multi=False,
+                                # maxHeight=150,
+                            ),
+                        ),
+                    ]),
+
+                    # html.H6("Pre / Next Stock"),
+
                     html.Hr(),
-                    html.H6("Short Trend Period"),
-                    dcc.Input(
-                        id="input_short_SMA", type="number", placeholder="Short SMA", min=1, max=200, step=1, value=3, size="sm",
-                        style={'width': '150px'}),
-                    html.H6("Mid Trend Period"),
-                    dcc.Input(
-                        id="input_medium_SMA", type="number", placeholder="Medium SMA", min=1, max=200, step=1, value=7, size="sm",
-                        style={'width': '150px'}),
-                    html.H6("Long Trend Period"),
-                    dcc.Input(
-                        id="input_long_SMA", type="number", placeholder="Long SMA", min=1, max=200, step=1, value=21, size="sm",
-                        style={'width': '150px'}),
-                    html.H6("Select Resolution"),
-                    dcc.RangeSlider(id='my-range-slider', min=400, max=800, step=50, value=[550], marks=None,),
-                    html.H6("Bollinger Band Channel"),
-                    dcc.Input(
-                        id="b_band_limit", type="number", placeholder="Bollinger Band", min=1, max=200, step=0.1, value=1.5, size="sm",
-                        style={'width': '150px'}),
-                    html.H6("Keltler Channel"),
-                    dcc.Input(
-                        id="kc_limit", type="number", placeholder="Keltner Channel", min=1, max=200, step=0.1, value=1.2, size="sm",
-                        style={'width': '150px'}),
+                    dbc.Accordion([
+                        dbc.AccordionItem([
+                            html.H6("Short Trend Period"),
+                            dcc.Input(
+                                id="input_short_SMA", type="number", placeholder="Short SMA", min=1, max=200,
+                                step=1,
+                                value=3, size="sm",
+                                style={'width': '150px'}),
+                            html.H6("Mid Trend Period"),
+                            dcc.Input(
+                                id="input_medium_SMA", type="number", placeholder="Medium SMA", min=1, max=200, step=1,
+                                value=7, size="sm",
+                                style={'width': '150px'}),
+                            html.H6("Long Trend Period"),
+                            dcc.Input(
+                                id="input_long_SMA", type="number", placeholder="Long SMA", min=1, max=200, step=1,
+                                value=21, size="sm",
+                                style={'width': '150px'}),
+                            html.H6("Select Resolution"),
+                            dcc.RangeSlider(id='my-range-slider', min=400, max=800, step=50, value=[550], marks=None, ),
+                            html.H6("Bollinger Band Channel"),
+                            dcc.Input(
+                                id="b_band_limit", type="number", placeholder="Bollinger Band", min=1, max=200,
+                                step=0.1, value=1.5, size="sm",
+                                style={'width': '150px'}),
+                            html.H6("Keltler Channel"),
+                            dcc.Input(
+                                id="kc_limit", type="number", placeholder="Keltner Channel", min=1, max=200, step=0.1,
+                                value=1.2, size="sm",
+                                style={'width': '150px'}),
+                        ], title="Chart Settings"),
+                        dbc.AccordionItem([
+
+                        ], title="Shortlisted"),
+                        dbc.AccordionItem([
+
+                        ], title="Trade Book Entry"),
+                    ], start_collapsed=True)
                 ]
             )
         ),
-    ], width=2, style=SIDEBAR_STYLE)
+    ], lg=2, xs=12)
 ])
 content = html.Div(
     [
         content_third_row,
     ],
-    style=CONTENT_STYLE
+    # style=CONTENT_STYLE
 )
 
 
@@ -160,28 +193,27 @@ def update_dropdown_list(dropdown_item_value):
     return options
 
 
-
-@callback(
-    Output('dropdown_exp', 'options'),
-    Output('dropdown_exp', 'value'),
-    [Input('expiry_selection', 'on')])
-def update_expiry_list(expiry_togle_option):
-    uri_expiry_full = "gs://bba_support_files/Expiry_Date_Full.csv"
-    df_expiry_full = pd.read_csv(uri_expiry_full)
-    df_expiry_full['Full'] = pd.to_datetime(df_expiry_full.Full)
-    df_expiry_full['Full'] = df_expiry_full['Full'].dt.strftime('%d-%b-%Y')
-    uri_expiry_monthly = "gs://bba_support_files/Expiry_Date_Monthly.csv"
-    df_expiry_monthly = pd.read_csv(uri_expiry_monthly)
-
-    if expiry_togle_option == True:
-        options = [{'label': x, 'value': x}
-                   for x in df_expiry_full['Full']]
-        value = df_expiry_monthly.Monthly[0]
-    else:
-        options = [{'label': x, 'value': x}
-                   for x in df_expiry_monthly['Monthly']]
-        value = Expiry_Date_Monthly.Monthly[0]
-    return options, value
+# @callback(
+#     Output('dropdown_exp', 'options'),
+#     Output('dropdown_exp', 'value'),
+#     [Input('expiry_selection', 'on')])
+# def update_expiry_list(expiry_togle_option):
+#     uri_expiry_full = "gs://bba_support_files/Expiry_Date_Full.csv"
+#     df_expiry_full = pd.read_csv(uri_expiry_full)
+#     df_expiry_full['Full'] = pd.to_datetime(df_expiry_full.Full)
+#     df_expiry_full['Full'] = df_expiry_full['Full'].dt.strftime('%d-%b-%Y')
+#     uri_expiry_monthly = "gs://bba_support_files/Expiry_Date_Monthly.csv"
+#     df_expiry_monthly = pd.read_csv(uri_expiry_monthly)
+#
+#     if expiry_togle_option == True:
+#         options = [{'label': x, 'value': x}
+#                    for x in df_expiry_full['Full']]
+#         value = df_expiry_monthly.Monthly[0]
+#     else:
+#         options = [{'label': x, 'value': x}
+#                    for x in df_expiry_monthly['Monthly']]
+#         value = Expiry_Date_Monthly.Monthly[0]
+#     return options, value
 
 @callback(
     Output('dropdown', 'value'),
@@ -226,7 +258,8 @@ def update_dropdown(n_clicks, n_clicks_next, dropdown_value, dropdown_opt_val):
 def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, dropdown_n_days_value,
                     short_sma, medium_sma, long_sma, graph_height,b_band,kc):
 
-    expiry_date = datetime.strptime(dropdown_exp_value, "%d-%b-%Y").date()
+    # expiry_date = datetime.strptime(dropdown_exp_value, "%d-%b-%Y").date()
+    expiry_date = datetime.strptime(dropdown_exp_value, "%Y-%m-%d").date()
 
     client = bigquery.Client()
     sql_stock = f"""
@@ -332,6 +365,7 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
             df_10M_VOL["ENTRY_BD"] = np.where(df_10M_VOL['TIMESTAMP'] >= df_10M_VOL['TIMESTAMP'].iloc[0],
                                       float(df_10M_VOL['EQ_LOW_PRICE'].iloc[0]), '')
     except Exception:
+        print(Exception)
         df_10M_VOL = pd.DataFrame(columns=['TIMESTAMP',
                                            'CUR_FUT_EXPIRY_DT', 'NEAR_FUT_EXPIRY_DT',
                                            'EQ_HIGH_PRICE', 'EQ_LOW_PRICE',
@@ -502,6 +536,16 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
         go.Scatter(x=df_stock['TIMESTAMP'], y=df_stock['BAR'], mode='markers', name="Consolidation",
                    marker=dict(size=10, symbol=1, color=df_stock['consolidation'])),
         row=14, col=1)
+    # # Add Annonation
+    # cur_expiry_dates = Expiry_Date_Monthly["NEAR_FUT_EXPIRY_DT"].iloc[1]
+    # prev_expiry_dates =Expiry_Date_Monthly["NEAR_FUT_EXPIRY_DT"].iloc[2]
+    cur_position = Expiry_Date_Monthly[Expiry_Date_Monthly['NEAR_FUT_EXPIRY_DT'] == dropdown_exp_value].index[0]
+    cur_position = int(cur_position)
+    cur_expiry_date = Expiry_Date_Monthly['NEAR_FUT_EXPIRY_DT'].iloc[cur_position]
+    prev_expiry_date = Expiry_Date_Monthly['NEAR_FUT_EXPIRY_DT'].iloc[cur_position + 1]
+    fig.add_vline(x=cur_expiry_date)
+    fig.add_vline(x=prev_expiry_date)
+
     # edit axis labels
     fig['layout']['yaxis']['title'] = 'Equity OHCL'
     fig['layout']['yaxis2']['title'] = 'Volume'
