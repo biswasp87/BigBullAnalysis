@@ -62,17 +62,11 @@ content_third_row = dbc.Row([
                                     id='submit_button',
                                     n_clicks=0,
                                     children='Prev',
-                                    # color='primary',
-                                    # className="ml-0",
-                                    # size='sm',
                                 ),
                                 dbc.Button(
                                     id='submit_button_next',
                                     n_clicks=0,
                                     children='Next',
-                                    # color='primary',
-                                    # className="ml-0",
-                                    # size='sm'
                                 ),
                             ], size='md'),
                         )
@@ -233,15 +227,17 @@ content_third_row = dbc.Row([
         ),
     ], lg=2, xs=12)
 ])
+
 content = html.Div(
     [
         content_third_row,
     ],
-    # style=CONTENT_STYLE
 )
 
 layout = html.Div([html.Br(), content, dcc.Store(id="df_shortlisted", data=[], storage_type='session')])
-
+# ____________________________________________________________________________________________
+# Update Watchlist Values as per the selected watchlist
+# ____________________________________________________________________________________________
 @callback(
     Output('dropdown', 'options'),
     [Input('dropdown_opt', 'value')])
@@ -250,7 +246,21 @@ def update_dropdown_list(dropdown_item_value):
     wl = pd.read_csv(dir_wl)
     options = [{'label': x, 'value': x} for x in wl['Symbol']]
     return options
+# ____________________________________________________________________________________________
+# Update Expiry Date Values
+# ____________________________________________________________________________________________
+@callback(
+    Output('dropdown_exp', 'options'),
+    [Input('dropdown_opt', 'value')])
+def update_dropdown_list(dropdown_item_value):
+    exp_dates = pd.read_csv("gs://bba_support_files/stock_expiry_dates.csv")
+    options = [{'label': x, 'value': x} for x in exp_dates['NEAR_FUT_EXPIRY_DT']]
+    return options
 
+# ____________________________________________________________________________________________
+# Callback function to fetch Previous and Next Symbol from the selected Watchlist
+# Select Symbol from Favourite list (if Selected)
+# ____________________________________________________________________________________________
 @callback(
     Output('dropdown', 'value'),
     Input('submit_button', 'n_clicks'),
@@ -404,8 +414,6 @@ def shortlisted_BQ_save(shortlisted_saved_df, n_click_save):
      Input('10_M_VOL_PB','on')])
 def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, dropdown_n_days_value,
                     short_sma, medium_sma, long_sma, graph_height,b_band,kc,opt_vol_pb_mode):
-
-    # expiry_date = datetime.strptime(dropdown_exp_value, "%d-%b-%Y").date()
     expiry_date = datetime.strptime(dropdown_exp_value, "%Y-%m-%d").date()
 
     client = bigquery.Client()
@@ -475,9 +483,6 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     df_stock['Lower_KC'] = df_stock['SMA'] - (kc * df_stock['ATR'])      #Lower curve
 
     df_stock['consolidation'] = np.where((df_stock['Lower_Bollinger'] > df_stock['Lower_KC']) & (df_stock['Upper_Bollinger'] < df_stock['Upper_KC']),"yellow","white")
-    # df_stock.info(verbose=True)
-    # df_stock.to_csv("df_stock.csv")
-    # print(df_store)
 
     try:
         df_10M_VOL = df_stock[["TIMESTAMP", "CUR_FUT_EXPIRY_DT", "NEAR_FUT_EXPIRY_DT",
@@ -676,8 +681,6 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
                    marker=dict(size=10, symbol=1, color=df_stock['consolidation'])),
         row=14, col=1)
     # # Add Annonation
-    # cur_expiry_dates = Expiry_Date_Monthly["NEAR_FUT_EXPIRY_DT"].iloc[1]
-    # prev_expiry_dates =Expiry_Date_Monthly["NEAR_FUT_EXPIRY_DT"].iloc[2]
     cur_position = Expiry_Date_Monthly[Expiry_Date_Monthly['NEAR_FUT_EXPIRY_DT'] == dropdown_exp_value].index[0]
     cur_position = int(cur_position)
     cur_expiry_date = Expiry_Date_Monthly['NEAR_FUT_EXPIRY_DT'].iloc[cur_position]
