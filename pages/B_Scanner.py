@@ -136,7 +136,7 @@ layout = html.Div([dcc.Store(id="intermediate_df", data=[], storage_type='local'
     Input('scanner_button', 'n_clicks'),
     Input('intermediate_df', 'data'))
 
-def update_graphs(row_ids, selected_row_ids,n_clicks, intermidiate_df):
+def update_scanner_list(row_ids, selected_row_ids,n_clicks, intermidiate_df):
     # print(row_ids)
     # print(selected_row_ids)
     scanner = pd.read_json(intermidiate_df, orient='split')

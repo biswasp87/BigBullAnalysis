@@ -60,7 +60,7 @@ navbar = dbc.Navbar(
                             in_navbar=True,
                             label="Stock Analysis",
                         )),
-                        dbc.NavItem(dbc.NavLink("Paper Trading", href="/d-paper-trading")),
+                        dbc.NavItem(dbc.NavLink("Alerts", href="/d-paper-trading")),
                     ],
                         navbar=True
                     )

@@ -17,3 +17,4 @@ dash_daq
 dash_auth
 fyers-apiv2
 dash_ag_grid
+python-telegram-bot==2.4

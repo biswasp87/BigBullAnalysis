@@ -20,12 +20,224 @@ import dash_daq as daq
 from dash import dash_table as dt
 from google.cloud import bigquery
 from google.cloud.exceptions import NotFound
+import asyncio
+import telegram
 
+# _____________________________________________________________________________________
+# Telegram Bot Credentials
+# _____________________________________________________________________________________
+API_KEY = "6815271407:AAGGMeMYtsDBLSaZPySktp-aU1fmO5A3y5Y"
+CHANNEL_ID = "@BigBullAnalysis360"
+bot = telegram.Bot(token=API_KEY)
+
+# _____________________________________________________________________________________
+# Pulling Data from Google Cloud Storage
+# _____________________________________________________________________________________
 watchlist = pd.read_csv("gs://bba_support_files/WL_ALL.csv")
 dropdown_opt_list = pd.read_csv("gs://bba_support_files/Dropdown_options.csv")
 Expiry_Date_Monthly = pd.read_csv("gs://bba_support_files/stock_expiry_dates.csv")
 
+# _____________________________________________________________________________________
+# Layout for Order Placement inside Modal Layout
+# _____________________________________________________________________________________
 
+trade_layout = dbc.Row([
+    dbc.Col([
+        html.Div(
+            [
+                dbc.Stack(
+                    [
+                        dcc.Dropdown(
+                            id='bba_symbol',
+                            options=[{'label': x, 'value': x}
+                                     for x in watchlist.Symbol],
+                            value='TATAMOTORS',  # default value
+                            maxHeight=150,
+                        ),
+                        dcc.Dropdown(
+                            id='bba_instrument',
+                            options=[{'label': 'Equity', 'value': 'EQ'},
+                                     {'label': 'Future', 'value': 'FUTSTK'},
+                                     {'label': 'Option', 'value': 'OPTSTK'}],
+                            value='EQ',  # default value
+                            multi=False
+                        ),
+                        dcc.Input(id="bba_qty", type="number", placeholder="Quantity", step=1, value=1, style={'display': 'block'}),
+                        dcc.Dropdown(
+                            id='bba_ordertype',
+                            options=[{'label': 'LIMIT ORDER', 'value': '1'},
+                                     {'label': 'MARKET ORDER', 'value': '2'},
+                                     {'label': 'STOP ORDER (SL-M)', 'value': '3'},
+                                     {'label': 'STOPLIMIT ORDER (SL-L)', 'value': '4'}],
+                            value='2',  # default value
+                            multi=False
+                        ),
+                        dcc.Dropdown(
+                            id='bba_side',
+                            options=[{'label': 'BUY', 'value': '1'},
+                                     {'label': 'SELL', 'value': '-1'}],
+                            value='1',  # default value
+                            multi=False
+                        ),
+                        dcc.Dropdown(
+                            id='bba_producttype',
+                            options=[],
+                            value='CNC',  # default value
+                            multi=False
+                        ),
+                        dbc.Row([
+                            dbc.Col([
+                                dcc.Input(
+                                    id="bba_limit_price", type="number", placeholder="Limit", step=0.05, value=0,
+                                    style={"width": "85px", "height": "30px"})
+                            ]),
+                            dbc.Col([
+                                dcc.Input(
+                                    id="bba_stop_price", type="number", placeholder="Stop Price", step=0.05, value=0,
+                                    style={"width": "85px", "height": "30px"})
+                            ]),
+                            dbc.Col([
+                                dcc.Input(
+                                    id="bba_disclose_qty", type="number", placeholder="Disc Qty", step=1, value=0,
+                                    style={"width": "85px", "height": "30px"})
+                            ]),
+                        ], justify="evenly"),
+                        dbc.Row([
+                            dbc.Col([
+                                dcc.Dropdown(
+                                    id='bba_expiry',
+                                    options=[{'label': x, 'value': x}
+                                             for x in Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT],
+                                    value=Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT[0],  # default value
+                                    multi=False,
+                                    maxHeight=150,
+                                    disabled=False, style={"width": "85px"}
+                                ),
+                            ]),
+                            dbc.Col([
+                                dcc.Dropdown(
+                                    id='bba_option_type',
+                                    options=[{'label': 'CALL', 'value': 'CE'},
+                                             {'label': 'PUT', 'value': 'PE'}],
+                                    value='CE',  # default value
+                                    multi=False,
+                                    disabled=False, style={"width": "85px"}
+                                ),
+                            ]),
+                            dbc.Col([
+                                dcc.Input(id="bba_strike_price", type="number", placeholder="Strike Price", step=1,
+                                          disabled=False, style={"width": "85px"})
+                            ]),
+                        ], justify="evenly"),
+                    ],
+                    gap=1,
+                ),
+            ]
+        )
+    ])
+])
+
+# _____________________________________________________________________________________
+# Layout for Alert
+# _____________________________________________________________________________________
+
+alert_layout = dbc.Row([
+    dbc.Col([
+        html.Div(
+            [
+                dbc.Stack(
+                    [
+                        dcc.Dropdown(
+                            id='condition',
+                            options=[{'label': 'BREAKOUT', 'value': 'BREAKOUT'},
+                                     {'label': 'BREAKDOWN', 'value': 'BREAKDOWN'}],
+                            value='BREAKOUT',  # default value
+                            multi=False,
+                            disabled=False
+                        ),
+                        html.Hr(),
+                        dbc.Row([
+                            dbc.Col([
+                                html.H6("TRIGER PRICE")
+                            ]),
+                            dbc.Col([
+                                dcc.Input(
+                                    id="bba_condition_price", type="number", placeholder="Entry", step=0.05,
+                                    style={"width": "85px", "height": "30px"}, value=0, )
+                            ]),
+                        ], align="center"),
+                        dbc.Row([
+                            dbc.Col([
+                                html.H6("STOP LOSS")
+                            ]),
+                            dbc.Col([
+                                dcc.Input(
+                                    id="bba_stop_loss", type="number", placeholder="Stop Loss", step=0.05,
+                                    style={"width": "85px", "height": "30px"}, value=0,)
+                            ]),
+                        ], align="center"),
+                        dbc.Row([
+                            dbc.Col([
+                                html.H6("BOOK PROFIT")
+                            ]),
+                            dbc.Col([
+                                dcc.Input(
+                                    id="bba_take_profit", type="number", placeholder="Target", step=0.05,
+                                    style={"width": "85px", "height": "30px"},  value=0,)
+                            ]),
+                        ], align="center"),
+                        dbc.Button(
+                            id='place_alert',
+                            n_clicks=0,
+                            children='Place Alert',
+                            color='warning',
+                            # className="ml-0",
+                            size='Auto'
+                        ),
+                        dbc.Button(
+                            id='place_order',
+                            n_clicks=0,
+                            children='Place Order',
+                            color='success',
+                            # className="ml-0",
+                            size='Auto'
+                        ),
+                        html.P(className="card-text", id='alert_status', children="Click Alert Button to generate Alert")
+                    ],
+                    gap=1,
+                ),
+            ]
+        )
+    ])
+])
+# _____________________________________________________________________________________
+# Modal layout for Order Placement
+# _____________________________________________________________________________________
+modal_layout = html.Div(
+    [
+        dbc.Modal(
+            [
+                dbc.ModalHeader(dbc.ModalTitle("Fyers Order Placement")),
+                dbc.ModalBody([
+                    trade_layout,
+                    html.Hr(),
+                    # alert_layout
+                ]),
+                dbc.ModalFooter(
+                    dbc.Button(
+                        "Close", id="close", className="ms-auto", n_clicks=0
+                    )
+                ),
+            ],
+            id="modal",
+            is_open=False,
+        ),
+    ]
+)
+
+# _____________________________________________________________________________________
+# Main Page Layout with Graph, Modal, and Alert Layout
+# _____________________________________________________________________________________
 content_third_row = dbc.Row([
     dbc.Col([dbc.Card(
         dbc.CardBody([
@@ -132,7 +344,7 @@ content_third_row = dbc.Row([
                                 ]),
                             ]),
                             html.H6("Select Resolution"),
-                            dcc.RangeSlider(id='my-range-slider', min=400, max=800, step=50, value=[550], marks=None, ),
+                            dcc.RangeSlider(id='my-range-slider', min=400, max=800, step=50, value=[800], marks=None, ),
                             dbc.Row([
                                 dbc.Col([
                                     html.H6("BB Channel"),
@@ -219,7 +431,10 @@ content_third_row = dbc.Row([
                             ])
                         ], title="Shortlisted"),
                         dbc.AccordionItem([
-
+                            html.Div([
+                                alert_layout,   # The Layout is defined above seperately
+                                modal_layout,
+                            ])
                         ], title="Trade Book Entry"),
                     ], start_collapsed=True)
                 ]
@@ -228,6 +443,8 @@ content_third_row = dbc.Row([
     ], lg=2, xs=12)
 ])
 
+
+
 content = html.Div(
     [
         content_third_row,
@@ -235,6 +452,89 @@ content = html.Div(
 )
 
 layout = html.Div([html.Br(), content, dcc.Store(id="df_shortlisted", data=[], storage_type='session')])
+
+# _____________________________________________________________________________________
+# Function to prepare Alert database and upload to Bog Query and Place Trade Call in Telegram
+# _____________________________________________________________________________________
+@callback(
+        Output('alert_status','children'),
+        Input('dropdown', 'value'),
+        Input('bba_stop_loss', 'value'),
+        Input('bba_take_profit', 'value'),
+        Input('condition', 'value'), Input('bba_condition_price', 'value'),
+        Input('place_alert', 'n_clicks')
+)
+def place_alert(bba_symbol_val,
+                bba_sl_value, bba_take_profit_val,
+                bba_condition_value, bba_condition_price,
+                place_alert_click):
+    alert_status = ""
+
+    ctx = dash.callback_context
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    alert_time = datetime.now()
+
+    if trigger_id == 'place_alert':
+        if bba_condition_value == "BREAKOUT" and bba_sl_value != 0 and bba_take_profit_val != 0:
+            index_symbol = [[f'{alert_time}', 'BREAKOUT', f'NSE:{bba_symbol_val}-EQ', 'BUY', f'{bba_condition_price}', 'ENTRY', 'NO'],
+                            [f'{alert_time}', 'BREAKDOWN', f'NSE:{bba_symbol_val}-EQ', 'SELL', f'{bba_sl_value}', 'SL', 'NO'],
+                            [f'{alert_time}', 'BREAKOUT', f'NSE:{bba_symbol_val}-EQ', 'SELL', f'{bba_take_profit_val}', 'PROFIT', 'NO']]
+            index_symbol_df = pd.DataFrame(index_symbol,
+                                           columns=['Alert_Datetime', 'Trade_Condition', 'Trade_Symbol', 'Trigger', 'Trigger_Price', 'Trigger_Type', 'Trigger_Status'])
+            telegram_message = f"""Buy {bba_symbol_val}\nEntry Level:{bba_condition_price}\nStop Loss:{bba_sl_value}\nBook profit Level: {bba_take_profit_val}"""
+
+        if bba_condition_value == "BREAKDOWN" and bba_sl_value != 0 and bba_take_profit_val != 0:
+            index_symbol = [[f'{alert_time}', 'BREAKDOWN', f'NSE:{bba_symbol_val}-EQ', 'SELL', f'{bba_condition_price}', 'ENTRY', 'NO'],
+                            [f'{alert_time}', 'BREAKOUT', f'NSE:{bba_symbol_val}-EQ', 'BUY', f'{bba_sl_value}', 'SL', 'NO'],
+                            [f'{alert_time}', 'BREAKDOWN', f'NSE:{bba_symbol_val}-EQ', 'BUY', f'{bba_take_profit_val}', 'PROFIT', 'NO']]
+            index_symbol_df = pd.DataFrame(index_symbol,
+                                           columns=['Alert_Datetime', 'Trade_Condition', 'Trade_Symbol', 'Trigger', 'Trigger_Price', 'Trigger_Type', 'Trigger_Status'])
+            telegram_message = f"""Sell {bba_symbol_val}\nEntry Level:{bba_condition_price}\nStop Loss:{bba_sl_value}\nBook profit Level: {bba_take_profit_val}"""
+
+        if bba_condition_value == "BREAKOUT" and (bba_sl_value == 0 or bba_take_profit_val == 0):
+            index_symbol = [[f'{alert_time}', 'BREAKOUT', f'NSE:{bba_symbol_val}-EQ', 'BUY', f'{bba_condition_price}', 'ENTRY', 'NO']]
+            index_symbol_df = pd.DataFrame(index_symbol,
+                                           columns=['Alert_Datetime', 'Trade_Condition', 'Trade_Symbol', 'Trigger', 'Trigger_Price', 'Trigger_Type', 'Trigger_Status'])
+            telegram_message = f"""BUY ALERT:\n {bba_symbol_val}\nBreakout Level:{bba_condition_price}"""
+
+        if bba_condition_value == "BREAKDOWN" and (bba_sl_value == 0 or bba_take_profit_val == 0):
+            index_symbol = [[f'{alert_time}', 'BREAKDOWN', f'NSE:{bba_symbol_val}-EQ', 'BUY', f'{bba_condition_price}', 'ENTRY', 'NO']]
+            index_symbol_df = pd.DataFrame(index_symbol,
+                                           columns=['Alert_Datetime', 'Trade_Condition', 'Trade_Symbol', 'Trigger', 'Trigger_Price', 'Trigger_Type', 'Trigger_Status'])
+            telegram_message = f"""SELL ALERT\n{bba_symbol_val}\nBreakdown Level:{bba_condition_price}"""
+
+        client = bigquery.Client()
+        table_id = 'phrasal-fire-373510.alert_order.alert'
+        project = "WRITE_APPEND"
+        job_config = bigquery.LoadJobConfig(write_disposition=project)
+        try:
+            client.get_table(table_id)  # Make an API request.
+            print("Table {} already exists.".format(table_id))
+            # Upload Current Dataframe
+            job = client.load_table_from_dataframe(index_symbol_df, table_id,
+                                                   job_config=job_config)  # Make an API request.
+            job.result()  # Wait for the job to complete.
+            table = client.get_table(table_id)  # Make an API request.
+            print("Loaded {} rows and {} columns to {}".format(table.num_rows, len(table.schema), table_id))
+
+            bot.sendMessage(chat_id=CHANNEL_ID, text=telegram_message) # Telegram Bot for pushing message in telegram
+            alert_status = f'Alert Created for {bba_symbol_val}'
+        except Exception as e:
+            alert_status = f'Error in creating ALERT'
+    return alert_status
+
+# _____________________________________________________________________________________
+# Function for Modal
+# _____________________________________________________________________________________
+@callback(
+    Output("order_status", "children"),
+    [Input("place_order", "n_clicks"), Input("close", "n_clicks")],
+    [State("modal", "is_open")],
+)
+def toggle_modal(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
 # ____________________________________________________________________________________________
 # Update Watchlist Values as per the selected watchlist
 # ____________________________________________________________________________________________
@@ -428,7 +728,7 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
                             CUR_PE_OI_SUM, CUR_CE_OI_SUM,
                             EQ_CHG_PER, FUT_COI, FUT_BUILD_UP,FUT_PRICE_COL, FUT_COI_EXPLOSION_COL,
                             CUR_PCR, NEAR_PCR, BAR, QTCO0321, QTCO0321COL
-        FROM `phrasal-fire-373510.Big_Bull_Analysis.Master_Data`
+        FROM `phrasal-fire-373510.Big_Bull_Analysis.Master_Data_Equity`
         WHERE SYMBOL = '{dropdown_value}'
         ORDER BY TIMESTAMP DESC LIMIT {dropdown_n_days_value}
     """
@@ -700,3 +1000,104 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     fig.update_layout(xaxis_title=dropdown_value+str(" LTP: ")+str(LTP)+str(" Change: ")+str(PER_CHNG)+str("%"))
 
     return fig, df_store.to_dict('records')
+
+# @callback(
+#     Output('bba_expiry', 'disabled'), Output('bba_option_type', 'disabled'), Output('bba_strike_price', 'disabled'),
+#     Output('bba_producttype', 'options'), Output('bba_producttype', 'value'),
+#     Output('bba_qty', 'value'), Output('bba_qty', 'step'),
+#     Input('bba_instrument', 'value'), Input('bba_symbol', 'value')
+# )
+# def input_field_ability(instrument_value, symbol_value):
+#     lot_size_value = lot_size[lot_size['Symbol'] == symbol_value]['LOT_SIZE'].iloc[0]
+#     if instrument_value == 'EQ':
+#         expiry_disability = True
+#         option_type_disability = True
+#         strike_price_disability = True
+#         product_type_options = [
+#                     {'label': 'CNC', 'value': 'CNC'},
+#                     {'label': 'INTRADAY', 'value': 'INTRADAY'},
+#                     {'label': 'CO', 'value': 'CO'},
+#                     {'label': 'BO', 'value': 'BO'}]
+#         bba_product_type_value = 'CNC'
+#         bba_qty_value = 1
+#         bba_qty_step = 1
+#     elif instrument_value == 'FUTSTK':
+#         expiry_disability = False
+#         option_type_disability = True
+#         strike_price_disability = True
+#         product_type_options = [
+#                    {'label': 'INTRADAY', 'value': 'INTRADAY'},
+#                    {'label': 'MARGIN', 'value': 'MARGIN'},
+#                    {'label': 'CO', 'value': 'CO'},
+#                    {'label': 'BO', 'value': 'BO'}]
+#         bba_product_type_value = 'MARGIN'
+#         bba_qty_value = lot_size_value
+#         bba_qty_step = int(lot_size_value)
+#     else:
+#         expiry_disability = False
+#         option_type_disability = False
+#         strike_price_disability = False
+#         product_type_options = [
+#                     {'label': 'INTRADAY', 'value': 'INTRADAY'},
+#                     {'label': 'MARGIN', 'value': 'MARGIN'},
+#                     {'label': 'CO', 'value': 'CO'},
+#                     {'label': 'BO', 'value': 'BO'}]
+#         bba_product_type_value = 'MARGIN'
+#         bba_qty_value = lot_size_value
+#         bba_qty_step = int(lot_size_value)
+#     return expiry_disability, option_type_disability, strike_price_disability, \
+#         product_type_options, bba_product_type_value, \
+#         bba_qty_value, bba_qty_step
+#
+#
+# @callback(
+#     Output('place_order','color'),
+#     Input('bba_side', 'value')
+# )
+# def order_button_colour(position_value):
+#     if position_value == '-1':
+#         colour_value = 'danger'
+#     else:
+#         colour_value = 'success'
+#     return colour_value
+
+# @callback(
+#     Output('order_status','children'),
+#     Input('bba_symbol', 'value'), Input('bba_instrument', 'value'), Input('bba_qty', 'value'),
+#     Input('bba_ordertype', 'value'), Input('bba_side', 'value'), Input('bba_producttype', 'value'),
+#     Input('bba_limit_price', 'value'), Input('bba_stop_price', 'value'), Input('bba_disclose_qty', 'value'),
+#     Input('bba_expiry', 'value'), Input('bba_option_type', 'value'), Input('bba_strike_price', 'value'), Input('bba_stop_loss', 'value'),
+#     Input('bba_take_profit', 'value'), Input('place_order', 'n_clicks')
+# )
+# def place_order(bba_symbol_val, bba_instrument_val, bba_qty_val, bba_ordertype_val, bba_side_val, bba_producttype_val,
+#                 bba_limit_price_val, bba_stop_price_val, bba_disclose_qty_val, bba_expiry_val, bba_option_type_val, bba_strike_price_val,
+#                 bba_stop_loss_val, bba_take_profit_val, place_order_click):  # Place Order Function
+#
+#     if bba_instrument_val == "EQ":
+#         symbol_format = "NSE:" + str(bba_symbol_val) + "-EQ"
+#     elif bba_instrument_val == 'FUTSTK':
+#         symbol_format = "NSE:" + str(bba_symbol_val) + bba_expiry_val[9:11] + str(bba_expiry_val[3:6]).upper() + 'FUT'
+#     else:
+#         symbol_format = "NSE:" + str(bba_symbol_val) + bba_expiry_val[9:11] + str(bba_expiry_val[3:6]).upper() + str(bba_strike_price_val) + str(bba_option_type_val)
+#
+#     if place_order_click > 1:
+#         data = {
+#             "symbol": '{}'.format(symbol_format),
+#             "qty": int(bba_qty_val),
+#             "type": int(bba_ordertype_val),
+#             "side": int(bba_side_val),
+#             "productType": '{}'.format(bba_producttype_val),
+#             "limitPrice": bba_limit_price_val,
+#             "stopPrice": bba_stop_price_val,
+#             "validity": "DAY",
+#             "disclosedQty": bba_disclose_qty_val,
+#             "offlineOrder": "False",
+#             "stopLoss": bba_stop_loss_val,
+#             "takeProfit": bba_take_profit_val
+#         }
+#         print(data)
+#
+#         fyers = fyersModel.FyersModel(client_id=client_id, token=token)
+#         print(fyers.get_profile())
+#         # print(fyers.place_order(data)['message'])
+#         return fyers.place_order(data)['message']
