@@ -16,7 +16,6 @@ import pandas as pd
 from google.cloud import storage
 from google.cloud import bigquery
 from datetime import date, timedelta, datetime
-import dash_daq as daq
 from dash import dash_table as dt
 from google.cloud import bigquery
 from google.cloud.exceptions import NotFound
@@ -289,7 +288,7 @@ content_third_row = dbc.Row([
                                 id='dropdown_exp',
                                 options=[{'label': x, 'value': x}
                                          for x in Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT],
-                                value=Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT[1],  # default value
+                                value=Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT[2],  # default value
                                 multi=False,
                                 maxHeight=150,
                             ),
@@ -363,30 +362,30 @@ content_third_row = dbc.Row([
                                 ]),
                             ]),
                             dbc.Row([
-                                dbc.Col([
-                                    daq.PowerButton(
-                                            id='10_M_VOL_PB',
-                                            on=True,
-                                            label='Opt Vol',
-                                            labelPosition='top'
-                                        ),
-                                ]),
-                                dbc.Col([
-                                    daq.PowerButton(
-                                        id='Extra_PB_2',
-                                        on=True,
-                                        label='Label',
-                                        labelPosition='top'
-                                    ),
-                                ]),
-                                dbc.Col([
-                                    daq.PowerButton(
-                                        id='Extra_PB_3',
-                                        on=True,
-                                        label='Label',
-                                        labelPosition='top'
-                                    ),
-                                ]),
+                                # dbc.Col([
+                                #     daq.PowerButton(
+                                #             id='10_M_VOL_PB',
+                                #             on=True,
+                                #             label='Opt Vol',
+                                #             labelPosition='top'
+                                #         ),
+                                # ]),
+                                # dbc.Col([
+                                #     daq.PowerButton(
+                                #         id='Extra_PB_2',
+                                #         on=True,
+                                #         label='Label',
+                                #         labelPosition='top'
+                                #     ),
+                                # ]),
+                                # dbc.Col([
+                                #     daq.PowerButton(
+                                #         id='Extra_PB_3',
+                                #         on=True,
+                                #         label='Label',
+                                #         labelPosition='top'
+                                #     ),
+                                # ]),
                             ]),
                         ], title="Chart Settings"),
                         dbc.AccordionItem([
@@ -710,10 +709,9 @@ def shortlisted_BQ_save(shortlisted_saved_df, n_click_save):
      Input('input_long_SMA', 'value'),
      Input('my-range-slider', 'value'),
      Input('b_band_limit', 'value'),
-     Input('kc_limit', 'value'),
-     Input('10_M_VOL_PB','on')])
+     Input('kc_limit', 'value')])
 def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, dropdown_n_days_value,
-                    short_sma, medium_sma, long_sma, graph_height,b_band,kc,opt_vol_pb_mode):
+                    short_sma, medium_sma, long_sma, graph_height,b_band,kc):
     expiry_date = datetime.strptime(dropdown_exp_value, "%Y-%m-%d").date()
 
     client = bigquery.Client()
@@ -802,10 +800,12 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
             df_10M_VOL = df_10M_VOL[df_10M_VOL.CUR_FUT_EXPIRY_DT == expiry_date]
             df_10M_VOL = df_10M_VOL.astype(str).replace('nan', 'None')
             df_10M_VOL = df_10M_VOL[(df_10M_VOL["CUR_PE_STRIKE_PR_10MVOL"] != 'None') | (df_10M_VOL["CUR_CE_STRIKE_PR_10MVOL"] != 'None')]
-            df_10M_VOL["ENTRY_BO"] = np.where(df_10M_VOL['TIMESTAMP'] >= df_10M_VOL['TIMESTAMP'].iloc[0],
-                                      float(df_10M_VOL['EQ_HIGH_PRICE'].iloc[0]), '')
-            df_10M_VOL["ENTRY_BD"] = np.where(df_10M_VOL['TIMESTAMP'] >= df_10M_VOL['TIMESTAMP'].iloc[0],
-                                      float(df_10M_VOL['EQ_LOW_PRICE'].iloc[0]), '')
+            # df_10M_VOL["ENTRY_BO"] = np.where(df_10M_VOL['TIMESTAMP'] >= df_10M_VOL['TIMESTAMP'].iloc[0],
+            #                           float(df_10M_VOL['EQ_HIGH_PRICE'].iloc[0]), '')
+            # df_10M_VOL["ENTRY_BD"] = np.where(df_10M_VOL['TIMESTAMP'] >= df_10M_VOL['TIMESTAMP'].iloc[0],
+            #                           float(df_10M_VOL['EQ_LOW_PRICE'].iloc[0]), '')
+            df_10M_VOL["ENTRY_BO"] = float(df_10M_VOL['EQ_HIGH_PRICE'].iloc[0])
+            df_10M_VOL["ENTRY_BD"] = float(df_10M_VOL['EQ_LOW_PRICE'].iloc[0])
     except Exception:
         print(Exception)
         df_10M_VOL = pd.DataFrame(columns=['TIMESTAMP',
@@ -814,7 +814,6 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
                                            'CUR_PE_STRIKE_PR_10MVOL', 'CUR_CE_STRIKE_PR_10MVOL',
                                            'NEAR_PE_STRIKE_PR_10MVOL', 'NEAR_CE_STRIKE_PR_10MVOL',
                                            'ENTRY_BO', 'ENTRY_BD'])
-
     df_store = df_stock.iloc[[-1]]
     if not df_10M_VOL.empty:
         df_store["10M_VOL_TIMESTAMP"] = df_10M_VOL['TIMESTAMP'].iloc[0]
@@ -863,7 +862,7 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
         go.Scatter(x=df_stock['TIMESTAMP'], y=df_stock['CUR_PE_STRIKE_PR_OIMAX'], mode='lines+markers',
                    name='Support'),
         row=1, col=1)
-    opt_vol_pb_mode_status = '{}'.format(opt_vol_pb_mode)
+    opt_vol_pb_mode_status = "True"
     if opt_vol_pb_mode_status == 'True':
         fig.add_trace(
             go.Scatter(x=df_10M_VOL['TIMESTAMP'], y=df_10M_VOL['CUR_CE_STRIKE_PR_10MVOL'], mode='markers',

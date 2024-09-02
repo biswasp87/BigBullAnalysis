@@ -1,12 +1,4 @@
 import dash
-# To create meta tag for each page, define the title, image, and description.
-dash.register_page(
-    __name__,
-    # path='/',
-    title='FNO Option Analysis',
-    name='Option Analysis'
-)
-
 from dash import dcc, html, Input, Output, callback
 import dash_bootstrap_components as dbc
 from plotly.subplots import make_subplots
@@ -14,6 +6,14 @@ import plotly.graph_objects as go
 import pandas as pd
 from google.cloud import bigquery
 from datetime import datetime
+
+# To create meta tag for each page, define the title, image, and description.
+dash.register_page(
+    __name__,
+    # path='/',
+    title='FNO Option Analysis',
+    name='Option Analysis'
+)
 
 fno_watchlist = pd.read_csv("gs://bba_support_files/WL_FNO.csv")
 Expiry_Date_Monthly = pd.read_csv("gs://bba_support_files/stock_expiry_dates.csv")
@@ -37,7 +37,7 @@ content_one_screen = html.Div([
                         id='opt_expiry_left',
                         options=[{'label': x, 'value': x}
                                  for x in Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT],
-                        value=Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT[0],  # default value
+                        value=Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT[2],  # default value
                         multi=False,
                         maxHeight=150,
                     ),
@@ -146,6 +146,8 @@ def store_data(symbol, expiry):
         ORDER BY TIMESTAMP DESC
     """
     df_option = client.query(sql).to_dataframe()
+    # print("df option", df_option)
+    # df_option.to_csv("df_option.csv")
     return df_option.to_dict('records')
 
 # _____________________________________________________________________________________
@@ -192,8 +194,12 @@ def update_left_graph(data, indicator_data, option_type, strike_price):
     analysis_stock_df_store = pd.DataFrame(indicator_data)
     # print(analysis_stock_df_store)
     option_df = pd.DataFrame(data)
+    option_df.style.format({"TIMESTAMP": lambda t: t.strftime("%Y-%m-%d")})
+    option_df["TIMESTAMP"] = pd.to_datetime(option_df.TIMESTAMP, dayfirst=True,format='%Y-%m-%d')
+    # option_df.info()
     option_df = option_df[option_df.OPTION_TYP == option_type]
     option_df = option_df[option_df.STRIKE_PR == strike_price].sort_values(by='TIMESTAMP', ascending=True)
+    # print(option_df)
     try:
         if option_df["SYMBOL"].iloc[0] == analysis_stock_df_store["SYMBOL"].iloc[0]:
             option_level_df = option_df[option_df.TIMESTAMP == analysis_stock_df_store['10M_VOL_TIMESTAMP'].iloc[0]]
