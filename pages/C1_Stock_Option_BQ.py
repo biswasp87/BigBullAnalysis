@@ -37,7 +37,7 @@ content_one_screen = html.Div([
                         id='opt_expiry_left',
                         options=[{'label': x, 'value': x}
                                  for x in Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT],
-                        value=Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT[2],  # default value
+                        value=Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT[1],  # default value
                         multi=False,
                         maxHeight=150,
                     ),
@@ -136,8 +136,8 @@ def update_symbol_strikeprice_value(data_value):
 )
 def store_data(symbol, expiry):
     expiry = datetime.strptime(expiry, '%Y-%m-%d').date()
-    table_cur_name = 'FUTSTK_' + str(expiry)
-    table_id = "phrasal-fire-373510.FNO_Data.{}".format(table_cur_name)
+    table_cur_name = 'STO_' + str(expiry)
+    table_id = "phrasal-fire-373510.Option_Data.{}".format(table_cur_name)
     client = bigquery.Client()
     sql = f"""
         SELECT *
@@ -165,6 +165,7 @@ def update_strike_price_values(memory_data, data_value):
     option_df_full = pd.DataFrame(memory_data)
     option_df_full['STRIKE_PR'] = option_df_full['STRIKE_PR'].astype(float).astype(int)
     stk_pr_list = option_df_full.STRIKE_PR.unique()
+    stk_pr_list.sort()
 
     option_df = pd.DataFrame(data_value)
     closing_price = option_df["EQ_CLOSE_PRICE"].iloc[-1]
@@ -175,7 +176,7 @@ def update_strike_price_values(memory_data, data_value):
     else:
         stk_pr_list_len = len(stk_pr_list)
         stk_pr_position = int(stk_pr_list_len/2)
-        print("Integer_strike_Price:"+str(stk_pr_position))
+        # print("Integer_strike_Price:"+str(stk_pr_position))
         strike_price_left = stk_pr_list[stk_pr_position]
         strike_price_right = stk_pr_list[stk_pr_position]
         return stk_pr_list, strike_price_left, strike_price_right
@@ -348,10 +349,21 @@ def update_option_chain_graph(data, oi_chain_date):
     df_option_chain_pe = df_option_chain[df_option_chain.OPTION_TYP == "PE"]
     df_option_chain_ce = df_option_chain[df_option_chain.OPTION_TYP == "CE"]
 
+    df_option_chain_ce = df_option_chain_ce.sort_values(by=['STRIKE_PR'])
+    df_option_chain_ce.reset_index(drop=True, inplace=True)
+    df_option_chain_pe = df_option_chain_pe.sort_values(by=['STRIKE_PR'])
+    df_option_chain_pe.reset_index(drop=True, inplace=True)
+
+    df_option_chain_ce.to_csv("df_option_chain_ce.csv")
+    df_option_chain_pe.to_csv("df_option_chain_pe.csv")
+
     fig_option_chain = go.Figure(data=[
-        go.Bar(name='CALL', x=df_option_chain["STRIKE_PR"].astype(str), y=df_option_chain_ce["OPEN_INT"], marker=dict(color='rgb(255, 0, 0)')),
-        go.Bar(name='PUT', x=df_option_chain["STRIKE_PR"].astype(str), y=df_option_chain_pe["OPEN_INT"], marker=dict(color='rgb(0, 204, 0)'))
+        go.Bar(name='CALL', x=df_option_chain_ce["STRIKE_PR"].astype(str), y=df_option_chain_ce["OPEN_INT"], marker=dict(color='rgb(255, 0, 0)')),
+        go.Bar(name='PUT', x=df_option_chain_ce["STRIKE_PR"].astype(str), y=df_option_chain_pe["OPEN_INT"], marker=dict(color='rgb(0, 204, 0)'))
     ])
+    # fig_option_chain = go.Figure(data=[
+    #     go.Bar(name='CALL', x=df_option_chain["STRIKE_PR"], y=df_option_chain_ce["OPEN_INT"], marker=dict(color='rgb(255, 0, 0)'))
+    # ])
     # Change the bar mode
     fig_option_chain.update_layout(barmode='group')
     fig_option_chain.update_layout(paper_bgcolor='rgb(255,255,255)', plot_bgcolor='rgb(255,255,255)')
@@ -373,9 +385,14 @@ def update_option_chain_graph(data, oi_chain_date):
     df_option_chain_pe_chg_oi = df_option_chain_ch_oi[df_option_chain_ch_oi.OPTION_TYP == "PE"]
     df_option_chain_ce_chg_oi = df_option_chain_ch_oi[df_option_chain_ch_oi.OPTION_TYP == "CE"]
 
+    df_option_chain_ce_chg_oi = df_option_chain_ce_chg_oi.sort_values(by=['STRIKE_PR'])
+    df_option_chain_ce_chg_oi.reset_index(drop=True, inplace=True)
+    df_option_chain_pe_chg_oi = df_option_chain_pe_chg_oi.sort_values(by=['STRIKE_PR'])
+    df_option_chain_pe_chg_oi.reset_index(drop=True, inplace=True)
+
     fig_option_chain_chg_oi = go.Figure(data=[
-        go.Bar(name='CALL', x=df_option_chain_ch_oi["STRIKE_PR"].astype(str), y=df_option_chain_ce_chg_oi["CHG_IN_OI"], marker=dict(color='rgb(255, 0, 0)')),
-        go.Bar(name='PUT', x=df_option_chain_ch_oi["STRIKE_PR"].astype(str), y=df_option_chain_pe_chg_oi["CHG_IN_OI"], marker=dict(color='rgb(0, 204, 0)'))
+        go.Bar(name='CALL', x=df_option_chain_ce_chg_oi["STRIKE_PR"].astype(str), y=df_option_chain_ce_chg_oi["CHG_IN_OI"], marker=dict(color='rgb(255, 0, 0)')),
+        go.Bar(name='PUT', x=df_option_chain_pe_chg_oi["STRIKE_PR"].astype(str), y=df_option_chain_pe_chg_oi["CHG_IN_OI"], marker=dict(color='rgb(0, 204, 0)'))
     ])
     # Change the bar mode
     fig_option_chain_chg_oi.update_layout(barmode='group')
@@ -398,9 +415,14 @@ def update_option_chain_graph(data, oi_chain_date):
     df_option_chain_volume_pe = df_option_chain_volume[df_option_chain_volume.OPTION_TYP == "PE"]
     df_option_chain_volume_ce = df_option_chain_volume[df_option_chain_volume.OPTION_TYP == "CE"]
 
+    df_option_chain_volume_ce = df_option_chain_volume_ce.sort_values(by=['STRIKE_PR'])
+    df_option_chain_volume_ce.reset_index(drop=True, inplace=True)
+    df_option_chain_volume_pe = df_option_chain_volume_pe.sort_values(by=['STRIKE_PR'])
+    df_option_chain_volume_pe.reset_index(drop=True, inplace=True)
+
     fig_option_chain_volume = go.Figure(data=[
-        go.Bar(name='CALL', x=df_option_chain_volume["STRIKE_PR"].astype(str), y=df_option_chain_volume_ce["OPEN_INT"], marker=dict(color='rgb(255, 0, 0)')),
-        go.Bar(name='PUT', x=df_option_chain_volume["STRIKE_PR"].astype(str), y=df_option_chain_volume_pe["OPEN_INT"], marker=dict(color='rgb(0, 204, 0)'))
+        go.Bar(name='CALL', x=df_option_chain_volume_ce["STRIKE_PR"].astype(str), y=df_option_chain_volume_ce["VOLUME"], marker=dict(color='rgb(255, 0, 0)')),
+        go.Bar(name='PUT', x=df_option_chain_volume_pe["STRIKE_PR"].astype(str), y=df_option_chain_volume_pe["VOLUME"], marker=dict(color='rgb(0, 204, 0)'))
     ])
     # Change the bar mode
     fig_option_chain_volume.update_layout(barmode='group')

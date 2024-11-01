@@ -288,7 +288,7 @@ content_third_row = dbc.Row([
                                 id='dropdown_exp',
                                 options=[{'label': x, 'value': x}
                                          for x in Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT],
-                                value=Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT[2],  # default value
+                                value=Expiry_Date_Monthly.NEAR_FUT_EXPIRY_DT[1],  # default value
                                 multi=False,
                                 maxHeight=150,
                             ),
@@ -800,10 +800,6 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
             df_10M_VOL = df_10M_VOL[df_10M_VOL.CUR_FUT_EXPIRY_DT == expiry_date]
             df_10M_VOL = df_10M_VOL.astype(str).replace('nan', 'None')
             df_10M_VOL = df_10M_VOL[(df_10M_VOL["CUR_PE_STRIKE_PR_10MVOL"] != 'None') | (df_10M_VOL["CUR_CE_STRIKE_PR_10MVOL"] != 'None')]
-            # df_10M_VOL["ENTRY_BO"] = np.where(df_10M_VOL['TIMESTAMP'] >= df_10M_VOL['TIMESTAMP'].iloc[0],
-            #                           float(df_10M_VOL['EQ_HIGH_PRICE'].iloc[0]), '')
-            # df_10M_VOL["ENTRY_BD"] = np.where(df_10M_VOL['TIMESTAMP'] >= df_10M_VOL['TIMESTAMP'].iloc[0],
-            #                           float(df_10M_VOL['EQ_LOW_PRICE'].iloc[0]), '')
             df_10M_VOL["ENTRY_BO"] = float(df_10M_VOL['EQ_HIGH_PRICE'].iloc[0])
             df_10M_VOL["ENTRY_BD"] = float(df_10M_VOL['EQ_LOW_PRICE'].iloc[0])
     except Exception:
