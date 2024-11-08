@@ -146,8 +146,6 @@ def store_data(symbol, expiry):
         ORDER BY TIMESTAMP DESC
     """
     df_option = client.query(sql).to_dataframe()
-    # print("df option", df_option)
-    # df_option.to_csv("df_option.csv")
     return df_option.to_dict('records')
 
 # _____________________________________________________________________________________
@@ -176,7 +174,6 @@ def update_strike_price_values(memory_data, data_value):
     else:
         stk_pr_list_len = len(stk_pr_list)
         stk_pr_position = int(stk_pr_list_len/2)
-        # print("Integer_strike_Price:"+str(stk_pr_position))
         strike_price_left = stk_pr_list[stk_pr_position]
         strike_price_right = stk_pr_list[stk_pr_position]
         return stk_pr_list, strike_price_left, strike_price_right
@@ -193,14 +190,12 @@ def update_strike_price_values(memory_data, data_value):
 )
 def update_left_graph(data, indicator_data, option_type, strike_price):
     analysis_stock_df_store = pd.DataFrame(indicator_data)
-    # print(analysis_stock_df_store)
     option_df = pd.DataFrame(data)
     option_df.style.format({"TIMESTAMP": lambda t: t.strftime("%Y-%m-%d")})
     option_df["TIMESTAMP"] = pd.to_datetime(option_df.TIMESTAMP, dayfirst=True,format='%Y-%m-%d')
-    # option_df.info()
     option_df = option_df[option_df.OPTION_TYP == option_type]
     option_df = option_df[option_df.STRIKE_PR == strike_price].sort_values(by='TIMESTAMP', ascending=True)
-    # print(option_df)
+
     try:
         if option_df["SYMBOL"].iloc[0] == analysis_stock_df_store["SYMBOL"].iloc[0]:
             option_level_df = option_df[option_df.TIMESTAMP == analysis_stock_df_store['10M_VOL_TIMESTAMP'].iloc[0]]
@@ -328,12 +323,9 @@ def update_right_graph(data, option_type, strike_price):
 )
 def option_chain_dates(oi_data):
     oi_date = pd.DataFrame(oi_data)
-    print(oi_date)
     oi_date_options = [{'label': x, 'value': x}
                for x in oi_date.TIMESTAMP.unique()]
     oi_date_value = oi_date.TIMESTAMP[0]  # default value
-    print(oi_date_options)
-    print(oi_date_value)
     return oi_date_options, oi_date_value
 # _____________________________________________________________________________________
 # open interest Graph
@@ -354,16 +346,11 @@ def update_option_chain_graph(data, oi_chain_date):
     df_option_chain_pe = df_option_chain_pe.sort_values(by=['STRIKE_PR'])
     df_option_chain_pe.reset_index(drop=True, inplace=True)
 
-    df_option_chain_ce.to_csv("df_option_chain_ce.csv")
-    df_option_chain_pe.to_csv("df_option_chain_pe.csv")
 
     fig_option_chain = go.Figure(data=[
         go.Bar(name='CALL', x=df_option_chain_ce["STRIKE_PR"].astype(str), y=df_option_chain_ce["OPEN_INT"], marker=dict(color='rgb(255, 0, 0)')),
-        go.Bar(name='PUT', x=df_option_chain_ce["STRIKE_PR"].astype(str), y=df_option_chain_pe["OPEN_INT"], marker=dict(color='rgb(0, 204, 0)'))
+        go.Bar(name='PUT', x=df_option_chain_pe["STRIKE_PR"].astype(str), y=df_option_chain_pe["OPEN_INT"], marker=dict(color='rgb(0, 204, 0)'))
     ])
-    # fig_option_chain = go.Figure(data=[
-    #     go.Bar(name='CALL', x=df_option_chain["STRIKE_PR"], y=df_option_chain_ce["OPEN_INT"], marker=dict(color='rgb(255, 0, 0)'))
-    # ])
     # Change the bar mode
     fig_option_chain.update_layout(barmode='group')
     fig_option_chain.update_layout(paper_bgcolor='rgb(255,255,255)', plot_bgcolor='rgb(255,255,255)')

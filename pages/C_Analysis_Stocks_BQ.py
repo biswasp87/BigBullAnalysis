@@ -362,30 +362,6 @@ content_third_row = dbc.Row([
                                 ]),
                             ]),
                             dbc.Row([
-                                # dbc.Col([
-                                #     daq.PowerButton(
-                                #             id='10_M_VOL_PB',
-                                #             on=True,
-                                #             label='Opt Vol',
-                                #             labelPosition='top'
-                                #         ),
-                                # ]),
-                                # dbc.Col([
-                                #     daq.PowerButton(
-                                #         id='Extra_PB_2',
-                                #         on=True,
-                                #         label='Label',
-                                #         labelPosition='top'
-                                #     ),
-                                # ]),
-                                # dbc.Col([
-                                #     daq.PowerButton(
-                                #         id='Extra_PB_3',
-                                #         on=True,
-                                #         label='Label',
-                                #         labelPosition='top'
-                                #     ),
-                                # ]),
                             ]),
                         ], title="Chart Settings"),
                         dbc.AccordionItem([
