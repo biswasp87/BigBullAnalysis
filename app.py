@@ -34,7 +34,7 @@ navbar = dbc.Navbar(
                         dbc.NavItem(dbc.DropdownMenu(
                             children=[
                                 dbc.DropdownMenuItem("FNO Scanner", href="/b-scanner", external_link=True, target='_blank'),
-                                dbc.DropdownMenuItem("Non FNO Scanner", href="/non_fno_scanner", external_link=True,
+                                dbc.DropdownMenuItem("Non FNO Scanner", href="/d4-scanner-wl-all", external_link=True,
                                                      target='_blank'),
                             ],
                             nav=True,
@@ -61,6 +61,7 @@ navbar = dbc.Navbar(
                             label="Stock Analysis",
                         )),
                         dbc.NavItem(dbc.NavLink("Alerts", href="/d-paper-trading")),
+                        dbc.NavItem(dbc.NavLink("Settings", href="/settings")),
                     ],
                         navbar=True
                     )

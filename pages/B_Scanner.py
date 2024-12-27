@@ -16,47 +16,49 @@ from dash import dash_table as dt
 from google.cloud import storage
 import pandas as pd
 
-# scanner = pd.read_csv('gs://biswasp87/Scanner.csv')
 scanner = pd.DataFrame()
-# ___________________________________________________________________________________________________
-# Import Data From Big Querry
-# ___________________________________________________________________________________________________
-@callback(
-    Output('scanner_table', "columns"),
-    Output('scanner_table', "data"),
-    Output('intermediate_df', 'data'),
-    Input('scanner_button', 'n_clicks'))
-def fetch_scanner_data_from_bq(n_clicks):
-    print(n_clicks)
-    client = bigquery.Client()
-    sql_stock = f""" SELECT * FROM `phrasal-fire-373510.Scanner_Data.FNO_Scanner` """
-    scanner = client.query(sql_stock).to_dataframe()
-    scanner.drop(scanner.columns[scanner.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
-    scanner.columns.astype(str)
-    scanner['id'] = scanner['SYMBOL'] # For selecting Symbols to pust it to watchlist
-    scanner.set_index('id', inplace=True, drop=False)
-    # print("Hi")
-    # print(scanner)
-    return [{'name': i, 'id': i, 'deletable': True} for i in scanner.columns if i != 'id'], scanner.to_dict('records'), scanner.to_json(date_format='iso', orient='split')
-
 # ___________________________________________________________________________________________________
 # Defining Layout of FNO Scanner Page and displaying the Data Table
 # ___________________________________________________________________________________________________
-content_first_row = dbc.CardGroup(
-    [
-        dbc.Card(
-            dbc.CardBody(
-                [
-                    dbc.Button(
-                        id='scanner_button',
-                        n_clicks=0,
-                        children='Send to Watchlist',
-                    ),
-                ]
-            )
-        ),
-    ]
-)
+content_first_row = dbc.Row([
+    dbc.Col([
+        dbc.CardGroup(
+            [
+                dbc.Card(
+                    dbc.CardBody(
+                        [
+                            dbc.Button(
+                                id='scanner_button',
+                                n_clicks=0,
+                                children='Send to Watchlist',
+                            )
+                        ]
+                    )
+                )
+            ]
+        )
+    ], lg=2, xs=12, sm=12),
+    dbc.Col([
+        dbc.CardGroup(
+            [
+                dbc.Card(
+                    dbc.CardBody(
+                        [
+                            dcc.RadioItems(
+                                id='scanner_type',
+                                options={
+                                    'FNO': 'FNO Stocks',
+                                    'ALL': 'Nifty 500 Stocks',
+                                },
+                                value='FNO'
+                            ),
+                        ]
+                    )
+                )
+            ]
+        )
+    ], lg=2, xs=12, sm=12)
+])
 
 content_second_row = dbc.Row(
     [
@@ -67,8 +69,6 @@ content_second_row = dbc.Row(
 )
 
 content_third_row = dt.DataTable(id="scanner_table",
-                                    # columns=[{'name': i, 'id': i, 'deletable': True} for i in scanner.columns if i != 'id'],
-                                    # data=scanner.to_dict('records'),
                                     editable=True,
                                     filter_action="native",
                                     sort_action="native",
@@ -78,8 +78,6 @@ content_third_row = dt.DataTable(id="scanner_table",
                                     selected_columns=[],
                                     selected_rows=[],
                                     page_action="native",
-                                    # page_current=0,
-                                    # page_size=10,
                                     style_header={
                                      'backgroundColor': 'grey',
                                      'fontWeight': 'bold'
@@ -126,6 +124,31 @@ content = html.Div(
 layout = html.Div([dcc.Store(id="intermediate_df", data=[], storage_type='local'), content])
 
 # ___________________________________________________________________________________________________
+# Import Data From Big Querry
+# ___________________________________________________________________________________________________
+@callback(
+    Output('scanner_table', "columns"),
+    Output('scanner_table', "data"),
+    Output('intermediate_df', 'data'),
+    Input('scanner_type', 'value'))
+def fetch_scanner_data_from_bq(scanner_type):
+    client = bigquery.Client()
+    if scanner_type == "FNO":
+        sql_stock = f""" SELECT * FROM `phrasal-fire-373510.Scanner_Data.FNO_Scanner` """
+    else:
+        sql_stock = f""" SELECT * FROM `phrasal-fire-373510.Scanner_Data.All_Scanner` """
+
+    scanner = client.query(sql_stock).to_dataframe()
+    scanner.drop(scanner.columns[scanner.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
+    scanner.columns.astype(str)
+    scanner['id'] = scanner['SYMBOL'] # For selecting Symbols to pust it to watchlist
+    scanner.set_index('id', inplace=True, drop=False)
+    # print("Hi")
+    # print(scanner)
+    return [{'name': i, 'id': i, 'deletable': True} for i in scanner.columns if i != 'id'], scanner.to_dict('records'), scanner.to_json(date_format='iso', orient='split')
+
+
+# ___________________________________________________________________________________________________
 # Button Function to Push the Selected Symbol to Scanner Watchlist
 # ___________________________________________________________________________________________________
 @callback(
@@ -137,8 +160,6 @@ layout = html.Div([dcc.Store(id="intermediate_df", data=[], storage_type='local'
     Input('intermediate_df', 'data'))
 
 def update_scanner_list(row_ids, selected_row_ids,n_clicks, intermidiate_df):
-    # print(row_ids)
-    # print(selected_row_ids)
     scanner = pd.read_json(intermidiate_df, orient='split')
     if selected_row_ids is None:
         dff = scanner
@@ -146,7 +167,6 @@ def update_scanner_list(row_ids, selected_row_ids,n_clicks, intermidiate_df):
         dff = scanner.loc[selected_row_ids]
 
     dff.rename(columns={'SYMBOL': 'Symbol'}, inplace=True)
-    # print(dff)
 
     ctx = dash.callback_context
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
@@ -160,7 +180,6 @@ def update_scanner_list(row_ids, selected_row_ids,n_clicks, intermidiate_df):
         except Exception:
             pass
     dff.rename(columns={'Symbol': 'SYMBOL'}, inplace=True)
-    # return dff.to_dict('records')
     return "Hello"
 
 # ___________________________________________________________________________________________________

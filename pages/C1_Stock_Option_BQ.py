@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, callback
+from dash import dcc, html, Input, Output, callback, no_update
 import dash_bootstrap_components as dbc
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -43,41 +43,70 @@ content_one_screen = html.Div([
                     ),
                     html.Hr(),
                     html.Label("Upper Graph Values", style={'color':'blue', 'padding':'8px'}),
-                    dcc.Dropdown(
-                        id='opt_type_left',
-                        options=[{'label': 'CALL', 'value': 'CE'},
-                                 {'label': 'PUT', 'value': 'PE'}],
-                        value='CE',  # default value
-                        multi=False,
-                        disabled=False
-                    ),
-                    dcc.Dropdown(
-                        id='opt_strike_left',
-                        options=[],
-                        # value='CE',  # default value
-                        multi=False,
-                        disabled=False
-                    ),
-                    html.Br(),
-                    html.Hr(),
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Dropdown(
+                                id='opt_type_left',
+                                options=[{'label': 'CALL', 'value': 'CE'},
+                                         {'label': 'PUT', 'value': 'PE'}],
+                                value='CE',  # default value
+                                multi=False,
+                                disabled=False
+                            ),
+                        ]),
+                        dbc.Col([
+                            dcc.Dropdown(
+                                id='opt_strike_left',
+                                options=[],
+                                # value='CE',  # default value
+                                multi=False,
+                                disabled=False
+                            ),
+                        ]),
+                    ]),
+                    # html.Br(),
+                    # html.Hr(),
                     html.Label("Lower Graph Values", style={'color':'blue', 'padding':'8px'}),
-                    dcc.Dropdown(
-                        id='opt_type_right',
-                        options=[{'label': 'CALL', 'value': 'CE'},
-                                 {'label': 'PUT', 'value': 'PE'}],
-                        value='CE',  # default value
-                        multi=False,
-                        disabled=False
-                    ),
-                    dcc.Input(id="opt_strike_right", type="number", placeholder="Strike Price", step=1,
-                              disabled=False, style={"width": "100px"}),
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Dropdown(
+                                id='opt_type_right',
+                                options=[{'label': 'CALL', 'value': 'CE'},
+                                         {'label': 'PUT', 'value': 'PE'}],
+                                value='PE',  # default value
+                                multi=False,
+                                disabled=False
+                            ),
+                        ]),
+                        dbc.Col([
+                            dcc.Input(id="opt_strike_right", type="number", placeholder="Strike Price", step=1,
+                                      disabled=False, style={"width": "100px"}),
+                        ]),
+                    ]),
                     html.Hr(),
                     html.Label("Option Chain Date", style={'color':'blue', 'padding':'8px'}),
-                    dcc.Dropdown(
-                        id='oi_chain_date',
-                        multi=False,
-                        maxHeight=150,
-                    ),
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Dropdown(
+                                id='oi_chain_date',
+                                multi=False,
+                                maxHeight=150,
+                            ),
+                        ]),dbc.Col([
+                            dbc.ButtonGroup([
+                                dbc.Button(
+                                    id='prev_opt_chn_dt',
+                                    n_clicks=0,
+                                    children='Prev',
+                                ),
+                                dbc.Button(
+                                    id='next_opt_chn_dt',
+                                    n_clicks=0,
+                                    children='Next',
+                                ),
+                            ], size='md'),
+                        ])
+                    ])
                 ])
             )
         ], lg=2, xs=12, sm=12),
