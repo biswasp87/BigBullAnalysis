@@ -342,20 +342,20 @@ def update_right_graph(data, option_type, strike_price):
     fig_right_graph['layout']['yaxis2']['title'] = 'Volume'
     fig_right_graph['layout']['yaxis3']['title'] = 'OI'
     return fig_right_graph
-# _____________________________________________________________________________________
-# Process unique dates available and update the 'oi chain date' option and values
-# _____________________________________________________________________________________
-@callback(
-    Output('oi_chain_date', 'options'),
-    Output('oi_chain_date', 'value'),
-    Input('memory', 'data')
-)
-def option_chain_dates(oi_data):
-    oi_date = pd.DataFrame(oi_data)
-    oi_date_options = [{'label': x, 'value': x}
-               for x in oi_date.TIMESTAMP.unique()]
-    oi_date_value = oi_date.TIMESTAMP[0]  # default value
-    return oi_date_options, oi_date_value
+# # _____________________________________________________________________________________
+# # Process unique dates available and update the 'oi chain date' option and values
+# # _____________________________________________________________________________________
+# @callback(
+#     Output('oi_chain_date', 'options'),
+#     Output('oi_chain_date', 'value'),
+#     Input('memory', 'data')
+# )
+# def option_chain_dates(oi_data):
+#     oi_date = pd.DataFrame(oi_data)
+#     oi_date_options = [{'label': x, 'value': x}
+#                for x in oi_date.TIMESTAMP.unique()]
+#     oi_date_value = oi_date.TIMESTAMP[0]  # default value
+#     return oi_date_options, oi_date_value
 # _____________________________________________________________________________________
 # open interest Graph
 # _____________________________________________________________________________________
@@ -450,3 +450,40 @@ def update_option_chain_graph(data, oi_chain_date):
                              annotation_position="bottom right")
     fig_option_chain_volume.update_layout(xaxis_title='Option Volume')
     return fig_option_chain_volume
+
+# _____________________________________________________________________________________
+# Process unique dates available and update the 'oi chain date' option and values
+# _____________________________________________________________________________________
+@callback(
+    Output('oi_chain_date', 'options'),
+    Output('oi_chain_date', 'value'),
+    Input('memory', 'data'),
+    Input('prev_opt_chn_dt', 'n_clicks'),
+    Input('next_opt_chn_dt', 'n_clicks'),
+    Input('oi_chain_date', 'value'),
+)
+def option_chain_dates(oi_data, nclick_prev, n_click_next, oi_date_dropdown):
+    oi_date = pd.DataFrame(oi_data)
+    ctx = dash.callback_context
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    print(trigger_id)
+
+    if trigger_id == 'prev_opt_chn_dt':
+        cur_position = oi_date[oi_date['TIMESTAMP'] == oi_date_dropdown].index[0]
+        cur_position = int(cur_position)
+        oi_date_value = oi_date['TIMESTAMP'].iloc[cur_position + 1]
+        oi_date_options = [{'label': x, 'value': x}
+                   for x in oi_date.TIMESTAMP.unique()]
+        return oi_date_options, oi_date_value
+    elif trigger_id == 'next_opt_chn_dt':
+        cur_position = oi_date[oi_date['TIMESTAMP'] == oi_date_dropdown].index[0]
+        cur_position = int(cur_position)
+        oi_date_value = oi_date['TIMESTAMP'].iloc[cur_position - 1]
+        oi_date_options = [{'label': x, 'value': x}
+                   for x in oi_date.TIMESTAMP.unique()]
+        return oi_date_options, oi_date_value
+    else:
+        oi_date_value = oi_date.TIMESTAMP[0]  # default value
+        oi_date_options = [{'label': x, 'value': x}
+                   for x in oi_date.TIMESTAMP.unique()]
+        return oi_date_options, oi_date_value

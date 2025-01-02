@@ -1,3 +1,5 @@
+from logging import exception
+
 import dash
 # To create meta tag for each page, define the title, image, and description.
 dash.register_page(
@@ -165,26 +167,26 @@ alert_layout = dbc.Row([
                                     style={"width": "85px", "height": "30px"}, value=0, )
                             ]),
                         ], align="center"),
-                        dbc.Row([
-                            dbc.Col([
-                                html.H6("STOP LOSS")
-                            ]),
-                            dbc.Col([
-                                dcc.Input(
-                                    id="bba_stop_loss", type="number", placeholder="Stop Loss", step=0.05,
-                                    style={"width": "85px", "height": "30px"}, value=0,)
-                            ]),
-                        ], align="center"),
-                        dbc.Row([
-                            dbc.Col([
-                                html.H6("BOOK PROFIT")
-                            ]),
-                            dbc.Col([
-                                dcc.Input(
-                                    id="bba_take_profit", type="number", placeholder="Target", step=0.05,
-                                    style={"width": "85px", "height": "30px"},  value=0,)
-                            ]),
-                        ], align="center"),
+                        # dbc.Row([
+                        #     dbc.Col([
+                        #         html.H6("STOP LOSS")
+                        #     ]),
+                        #     dbc.Col([
+                        #         dcc.Input(
+                        #             id="bba_stop_loss", type="number", placeholder="Stop Loss", step=0.05,
+                        #             style={"width": "85px", "height": "30px"}, value=0,)
+                        #     ]),
+                        # ], align="center"),
+                        # dbc.Row([
+                        #     dbc.Col([
+                        #         html.H6("BOOK PROFIT")
+                        #     ]),
+                        #     dbc.Col([
+                        #         dcc.Input(
+                        #             id="bba_take_profit", type="number", placeholder="Target", step=0.05,
+                        #             style={"width": "85px", "height": "30px"},  value=0,)
+                        #     ]),
+                        # ], align="center"),
                         dbc.Button(
                             id='place_alert',
                             n_clicks=0,
@@ -429,59 +431,45 @@ content = html.Div(
 layout = html.Div([html.Br(), content, dcc.Store(id="df_shortlisted", data=[], storage_type='session')])
 
 # _____________________________________________________________________________________
-# Function to prepare Alert database and upload to Bog Query and Place Trade Call in Telegram
+# Function to prepare Alert database and upload to Big Query
 # _____________________________________________________________________________________
 @callback(
         Output('alert_status','children'),
         Input('dropdown', 'value'),
-        Input('bba_stop_loss', 'value'),
-        Input('bba_take_profit', 'value'),
-        Input('condition', 'value'), Input('bba_condition_price', 'value'),
+        Input('condition', 'value'),
+        Input('bba_condition_price', 'value'),
         Input('place_alert', 'n_clicks')
 )
 def place_alert(bba_symbol_val,
-                bba_sl_value, bba_take_profit_val,
                 bba_condition_value, bba_condition_price,
                 place_alert_click):
     alert_status = ""
 
     ctx = dash.callback_context
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    alert_time = datetime.now()
+    alert_date = str(date.today())
 
     if trigger_id == 'place_alert':
-        if bba_condition_value == "BREAKOUT" and bba_sl_value != 0 and bba_take_profit_val != 0:
-            index_symbol = [[f'{alert_time}', 'BREAKOUT', f'NSE:{bba_symbol_val}-EQ', 'BUY', f'{bba_condition_price}', 'ENTRY', 'NO'],
-                            [f'{alert_time}', 'BREAKDOWN', f'NSE:{bba_symbol_val}-EQ', 'SELL', f'{bba_sl_value}', 'SL', 'NO'],
-                            [f'{alert_time}', 'BREAKOUT', f'NSE:{bba_symbol_val}-EQ', 'SELL', f'{bba_take_profit_val}', 'PROFIT', 'NO']]
-            index_symbol_df = pd.DataFrame(index_symbol,
-                                           columns=['Alert_Datetime', 'Trade_Condition', 'Trade_Symbol', 'Trigger', 'Trigger_Price', 'Trigger_Type', 'Trigger_Status'])
-            telegram_message = f"""Buy {bba_symbol_val}\nEntry Level:{bba_condition_price}\nStop Loss:{bba_sl_value}\nBook profit Level: {bba_take_profit_val}"""
+        index_symbol = [[f'{alert_date}', f'{bba_condition_value}', f'{bba_symbol_val}', f'{bba_condition_price}', "",'ACTIVE']]
+        index_symbol_df = pd.DataFrame(index_symbol,
+                                           columns=['Alert_Date', 'Alert_Condition', 'Alert_Symbol', 'Alert_Price', 'Trigger_Date', 'Alert_Status'])
+        telegram_message = f"""{bba_condition_value} TRADE\n{bba_symbol_val}\nEntry Price:{bba_condition_price}"""
 
-        if bba_condition_value == "BREAKDOWN" and bba_sl_value != 0 and bba_take_profit_val != 0:
-            index_symbol = [[f'{alert_time}', 'BREAKDOWN', f'NSE:{bba_symbol_val}-EQ', 'SELL', f'{bba_condition_price}', 'ENTRY', 'NO'],
-                            [f'{alert_time}', 'BREAKOUT', f'NSE:{bba_symbol_val}-EQ', 'BUY', f'{bba_sl_value}', 'SL', 'NO'],
-                            [f'{alert_time}', 'BREAKDOWN', f'NSE:{bba_symbol_val}-EQ', 'BUY', f'{bba_take_profit_val}', 'PROFIT', 'NO']]
-            index_symbol_df = pd.DataFrame(index_symbol,
-                                           columns=['Alert_Datetime', 'Trade_Condition', 'Trade_Symbol', 'Trigger', 'Trigger_Price', 'Trigger_Type', 'Trigger_Status'])
-            telegram_message = f"""Sell {bba_symbol_val}\nEntry Level:{bba_condition_price}\nStop Loss:{bba_sl_value}\nBook profit Level: {bba_take_profit_val}"""
-
-        if bba_condition_value == "BREAKOUT" and (bba_sl_value == 0 or bba_take_profit_val == 0):
-            index_symbol = [[f'{alert_time}', 'BREAKOUT', f'NSE:{bba_symbol_val}-EQ', 'BUY', f'{bba_condition_price}', 'ENTRY', 'NO']]
-            index_symbol_df = pd.DataFrame(index_symbol,
-                                           columns=['Alert_Datetime', 'Trade_Condition', 'Trade_Symbol', 'Trigger', 'Trigger_Price', 'Trigger_Type', 'Trigger_Status'])
-            telegram_message = f"""BUY ALERT:\n {bba_symbol_val}\nBreakout Level:{bba_condition_price}"""
-
-        if bba_condition_value == "BREAKDOWN" and (bba_sl_value == 0 or bba_take_profit_val == 0):
-            index_symbol = [[f'{alert_time}', 'BREAKDOWN', f'NSE:{bba_symbol_val}-EQ', 'BUY', f'{bba_condition_price}', 'ENTRY', 'NO']]
-            index_symbol_df = pd.DataFrame(index_symbol,
-                                           columns=['Alert_Datetime', 'Trade_Condition', 'Trade_Symbol', 'Trigger', 'Trigger_Price', 'Trigger_Type', 'Trigger_Status'])
-            telegram_message = f"""SELL ALERT\n{bba_symbol_val}\nBreakdown Level:{bba_condition_price}"""
-
-        client = bigquery.Client()
-        table_id = 'phrasal-fire-373510.alert_order.alert'
-        project = "WRITE_APPEND"
-        job_config = bigquery.LoadJobConfig(write_disposition=project)
+    client = bigquery.Client()
+    table_id = 'phrasal-fire-373510.alert_order.alert'
+    project = "WRITE_APPEND"
+    job_config = bigquery.LoadJobConfig(
+        schema=[
+            bigquery.SchemaField("Alert_Date", "STRING", mode="REQUIRED"),
+            bigquery.SchemaField("Alert_Condition", "STRING", mode="REQUIRED"),
+            bigquery.SchemaField("Alert_Symbol", "STRING", mode="REQUIRED"),
+            bigquery.SchemaField("Alert_Price", "STRING", mode="REQUIRED"),
+            bigquery.SchemaField("Trigger_Date", "STRING", mode="NULLABLE"),
+            bigquery.SchemaField("Alert_Status", "STRING", mode="REQUIRED"),
+            # bigquery.SchemaField("EXPIRY_DT", "DATE", mode="REQUIRED"),
+            ],
+        write_disposition=project)
+    try:
         try:
             client.get_table(table_id)  # Make an API request.
             print("Table {} already exists.".format(table_id))
@@ -492,10 +480,25 @@ def place_alert(bba_symbol_val,
             table = client.get_table(table_id)  # Make an API request.
             print("Loaded {} rows and {} columns to {}".format(table.num_rows, len(table.schema), table_id))
 
-            bot.sendMessage(chat_id=CHANNEL_ID, text=telegram_message) # Telegram Bot for pushing message in telegram
+            bot.sendMessage(chat_id=CHANNEL_ID,
+                            text=telegram_message)  # Telegram Bot for pushing message in telegram
             alert_status = f'Alert Created for {bba_symbol_val}'
-        except Exception as e:
-            alert_status = f'Error in creating ALERT'
+        except NotFound:
+            print("Table {} is not found. Proceed to create table".format(table_id))
+            client.create_table(table_id)  # API request
+            print(f"Created {table_id}.")
+            # Upload Current Dataframe
+            job = client.load_table_from_dataframe(index_symbol_df, table_id,
+                                                   job_config=job_config)  # Make an API request.
+            job.result()  # Wait for the job to complete.
+
+            table = client.get_table(table_id)  # Make an API request.
+            print("Loaded {} rows and {} columns to {}".format(table.num_rows, len(table.schema), table_id))
+            alert_status = f'Alert Created for {bba_symbol_val}'
+    except exception as e:
+        print(e)
+        alert_status = f'ERROR in Creating Alert'
+
     return alert_status
 
 # _____________________________________________________________________________________

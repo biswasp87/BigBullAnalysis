@@ -15,6 +15,6 @@ gcsfs
 db-dtypes
 dash_daq
 dash_auth
-fyers-apiv3
 dash_ag_grid
 python-telegram-bot
+upstox-python-sdk

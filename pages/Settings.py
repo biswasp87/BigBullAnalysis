@@ -9,7 +9,7 @@ dash.register_page(
     name='Settings'
 )
 import dash_bootstrap_components as dbc
-from dash import Dash, dcc, html, Input, Output, callback
+from dash import Dash, dcc, html, Input, Output, callback, State
 from google.cloud import storage
 import pandas as pd
 from datetime import date, timedelta, datetime
@@ -22,6 +22,7 @@ bucket = storage_client.bucket('biswasp87')
 
 # PART II: Preparing the Layout
 # ___________________________________________________________________________________________________________
+
 
 settings_first_card = [
     dbc.CardHeader("FUNCTION REPORT"),
@@ -145,6 +146,51 @@ settings_first_card = [
                 ], lg=2, xs=3),
                 dbc.Col([
                     dbc.Button("Update Now", color="primary", id='D3_button', className="btn btn-primary btn-sm")
+                ], lg=2, xs=3,
+                ),
+            ]),
+            html.Hr(),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Row([html.P(className="card-text", id='D4_Col1_L1_Para')])
+                ], lg=5, xs=3),
+                dbc.Col([
+                    dbc.Row([html.P(className="card-text", id='D4_Col2_L1_Para')])
+                ], lg=2, xs=3),
+                dbc.Col([
+                    dbc.Row([html.P(className="card-text", id='D4_Col3_L1_Para')])
+                ], lg=2, xs=3),
+                dbc.Col([
+                    dbc.Button("Update Now", color="primary", id='D4_button', className="btn btn-primary btn-sm"),
+                    dbc.Modal(
+                        [
+                            dbc.ModalHeader(dbc.ModalTitle("Scanner NIFTY 500"), close_button=True),
+                            dbc.ModalBody("This function takes about 30 Minute to proceed. Do you still want to proceed?"),
+                            dbc.ModalFooter(
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Button(
+                                            "Cancel",
+                                            id="D4_button_modal_cancel",
+                                            className="ms-auto",
+                                            n_clicks=0,
+                                        ),
+                                    ]),
+                                    dbc.Col([
+                                        dbc.Button(
+                                            "OK",
+                                            id="D4_button_modal_ok",
+                                            className="ms-auto",
+                                            n_clicks=0,
+                                        ),
+                                    ]),
+                                ])
+                            ),
+                        ],
+                        id="D4_modal",
+                        centered=True,
+                        is_open=False,
+                    ),
                 ], lg=2, xs=3,
                 ),
             ])
@@ -338,3 +384,39 @@ def update_function_d3(D3_clicks):
         r_status = r.status_code
 
     return (D3_Col1_L1_Para_txt, D3_Col2_L1_Para_txt, D3_Col3_L1_Para_txt)
+
+# # ___________________________________________________________________________________________________________
+# # PART III: Defining the Callbacks to update the Card Details (Function D4)
+# # ___________________________________________________________________________________________________________
+@callback(
+Output('D4_Col1_L1_Para','children'),
+    Output('D4_Col2_L1_Para','children'),
+    Output('D4_Col3_L1_Para','children'),
+    Input('D4_button', 'n_clicks')
+)
+def update_function_d4(D4_clicks):
+    function_D4_df = pd.read_csv("gs://bba_function_update_status/D4_Scanner_WL_All.csv")
+    D4_Col1_L1_Para_txt = function_D4_df["FUNCTION"].iloc[0]
+    D4_Col2_L1_Para_txt = function_D4_df["STATUS"].iloc[0]
+    D4_Col3_L1_Para_txt = function_D4_df["DATE"].iloc[0]
+
+    # if D4_clicks == 1:
+
+
+    return (D4_Col1_L1_Para_txt, D4_Col2_L1_Para_txt, D4_Col3_L1_Para_txt)
+
+
+@callback(
+    Output("D4_modal", "is_open"),
+    [Input("D4_button_modal_cancel", "n_clicks"),
+     Input("D4_button_modal_ok", "n_clicks"),
+     Input("D4_button", "n_clicks")],
+    [State("D4_modal", "is_open")],
+)
+def toggle_modal(n1, n2, n3, is_open):
+    if n1 or n3:
+        return not is_open
+    if n2 == 1:
+        r = requests.post("https://asia-east1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/phrasal-fire-373510/jobs/main:run")
+        r_status = r.status_code
+    return is_open

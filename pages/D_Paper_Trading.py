@@ -16,11 +16,15 @@ from dash import dash_table as dt
 from google.cloud import storage
 import pandas as pd
 from dash.exceptions import PreventUpdate
+import upstox_client
+from upstox_client.rest import ApiException
 
 alert = pd.DataFrame()
+url = "https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=1c51a1bc-de3e-4b6f-9ec7-a392943d0de7&redirect_uri=https://bigbullanalysis-ctckij6ibq-uc.a.run.app/"
 # ___________________________________________________________________________________________________
 # Layout for Alert Page
 # ___________________________________________________________________________________________________
+
 content_first_row = dbc.CardGroup(
     [
         dbc.Card(
@@ -82,7 +86,7 @@ content_third_row = dt.DataTable(id="alert_table",
                                     ]
                                 )
 
-content = html.Div(
+second_column_content = html.Div(
     [
         html.Br(),
         content_first_row,
@@ -92,7 +96,48 @@ content = html.Div(
     ],
 )
 
-layout = html.Div([content])
+content_navbar = html.Div([
+    dbc.Row([
+        dbc.Col([
+            dbc.Row([
+                dbc.Button(
+                    "Upstock Login",
+                    href=url,
+                    external_link=True,
+                    color="primary",
+                    target='_blank'
+                ),
+            ]),
+            html.Hr(),
+            dbc.Row([
+                dcc.Input(id="auth_code_from_url", type="text", placeholder="Enter Code", style={'display': 'block'}),
+            ]),
+            html.Hr(),
+            dbc.Row([
+                dbc.Button(
+                    "Generate Access Token",
+                    color="primary",
+                    id="generate_access_token"
+                ),
+            ]),
+            html.Hr(),
+            dbc.Row([
+                html.P(className="card-text", id='access_token_status', children="hi"),
+            ])
+        ])
+    ])
+])
+main_layout = dbc.Row([
+    dbc.Col([
+        html.Br(),
+        content_navbar
+    ], lg=2, xs=12),
+    dbc.Col([
+        second_column_content
+    ], lg=10, xs=12)
+])
+
+layout = html.Div([main_layout])
 
 # ___________________________________________________________________________________________________
 # Import Alert Data From Big Querry and display on Table
@@ -142,3 +187,35 @@ def selected_data_to_csv(nclicks,table1):
             query_job = client.query(blank_alert__sql)  # API request
             query_job.result()  # Waits for statement to finish
             return "All records deleted"
+
+@callback(Output('access_token_status','children'),
+          Input('generate_access_token','n_clicks'),
+          Input('auth_code_from_url','value'))
+def access_token(nclick, auth_code):
+    if nclick == 1:
+        api_instance = upstox_client.LoginApi()
+        api_version = '2.0'
+        code = auth_code
+        client_id = '1c51a1bc-de3e-4b6f-9ec7-a392943d0de7'
+        client_secret = 'syr0qzt2qw'
+        redirect_uri = 'https://bigbullanalysis-ctckij6ibq-uc.a.run.app/'
+        grant_type = 'authorization_code'
+
+        try:
+            # Get token API
+            api_response = api_instance.token(api_version, code=code, client_id=client_id, client_secret=client_secret,
+                                              redirect_uri=redirect_uri, grant_type=grant_type)
+            # print(api_response)
+            new_access_token = api_response.access_token
+            try:
+                client_storage = storage.Client()
+                bucket = client_storage.bucket('biswasp87')
+                blob = bucket.blob('access_token.txt')
+                blob.upload_from_string(str(new_access_token))
+            except Exception:
+                pass
+            return str("New Access Token Generated")
+
+        except ApiException as e:
+            print("Exception when calling LoginApi->token: %s\n" % e)
+            return "Error While fetching Access Token"
