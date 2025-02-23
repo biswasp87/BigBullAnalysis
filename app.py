@@ -31,16 +31,17 @@ navbar = dbc.Navbar(
                     dbc.Nav([
                         dbc.NavItem(dbc.NavLink("Home", href="/")),
                         dbc.NavItem(dbc.NavLink("FPI Investment", href="/a-fpi-investment")),
-                        dbc.NavItem(dbc.DropdownMenu(
-                            children=[
-                                dbc.DropdownMenuItem("FNO Scanner", href="/b-scanner", external_link=True, target='_blank'),
-                                dbc.DropdownMenuItem("Non FNO Scanner", href="/d4-scanner-wl-all", external_link=True,
-                                                     target='_blank'),
-                            ],
-                            nav=True,
-                            in_navbar=True,
-                            label="Scanner",
-                        )),
+                        dbc.NavItem(dbc.NavLink("Scanner", href="/b-scanner", external_link=True, target='_blank')),
+                        # dbc.NavItem(dbc.DropdownMenu(
+                        #     children=[
+                        #         dbc.DropdownMenuItem("FNO Scanner", href="/b-scanner", external_link=True, target='_blank'),
+                        #         dbc.DropdownMenuItem("Non FNO Scanner", href="/d4-scanner-wl-all", external_link=True,
+                        #                              target='_blank'),
+                        #     ],
+                        #     nav=True,
+                        #     in_navbar=True,
+                        #     label="Scanner",
+                        # )),
                         dbc.NavItem(dbc.DropdownMenu(
                             children=[
                                 dbc.DropdownMenuItem("Nifty", href="/hownnlearns"),

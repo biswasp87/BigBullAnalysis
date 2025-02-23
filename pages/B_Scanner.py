@@ -44,13 +44,23 @@ content_first_row = dbc.Row([
                 dbc.Card(
                     dbc.CardBody(
                         [
-                            dcc.RadioItems(
+                            # dcc.RadioItems(
+                            #     id='scanner_type',
+                            #     options={
+                            #         'FNO': 'FNO Stocks',
+                            #         'ALL': 'Nifty 500 Stocks',
+                            #     },
+                            #     value='FNO'
+                            # ),
+                            dcc.Dropdown(
                                 id='scanner_type',
-                                options={
-                                    'FNO': 'FNO Stocks',
-                                    'ALL': 'Nifty 500 Stocks',
-                                },
-                                value='FNO'
+                                options=[{'label': 'FNO Stocks', 'value': 'FNO'},
+                                         {'label': 'Nifty 500 Stocks', 'value': 'ALL'},
+                                         {'label': 'Consolidation', 'value': 'CONSOLIDATION'},
+                                         {'label': 'Momentum Stocks', 'value': 'MOMENTUM'}],
+                                value='FNO',  # default value
+                                multi=False,
+                                disabled=False
                             ),
                         ]
                     )
@@ -135,8 +145,12 @@ def fetch_scanner_data_from_bq(scanner_type):
     client = bigquery.Client()
     if scanner_type == "FNO":
         sql_stock = f""" SELECT * FROM `phrasal-fire-373510.Scanner_Data.FNO_Scanner` """
-    else:
+    elif scanner_type == "ALL":
         sql_stock = f""" SELECT * FROM `phrasal-fire-373510.Scanner_Data.All_Scanner` """
+    elif scanner_type == "CONSOLIDATION":
+        sql_stock = f""" SELECT * FROM `phrasal-fire-373510.Scanner_Data.D5_Consolidation` """
+    else:
+        sql_stock = f""" SELECT * FROM `phrasal-fire-373510.Scanner_Data.D6_Per_Change` """
 
     scanner = client.query(sql_stock).to_dataframe()
     scanner.drop(scanner.columns[scanner.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
