@@ -427,7 +427,7 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
         WHERE SYMBOL = '{dropdown_value}'
         ORDER BY TIMESTAMP DESC LIMIT {dropdown_n_days_value}
     """
-    # df_stock = client.query(sql_stock).to_dataframe()
+    df_stock = client.query(sql_stock).to_dataframe()
 
     # # Import Data from Cloud storage Bucket (JSON)
     # # _______________________________________________________________________________________________________________
@@ -435,32 +435,32 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     # # Read directly into a DataFrame
     # df_stock = pd.read_json(gcs_path)
 
-    # Import Data from Render Postgre SQL
-    # _______________________________________________________________________________________________________________
-    # 1. Retrieve your External Database URL from your Render.com dashboard.
-    # It usually looks like: postgresql://user:password@external_host:port/database_name
-    RENDER_EXTERNAL_DB_URL = "postgresql://prasenjit:rrbhbSbyRcNAQkmiPbjlLKkw4zwIKqxi@dpg-d8kkilho3t8c73eu0nu0-a.oregon-postgres.render.com/bigbullanalysis_db"
-
-    print(f"Connecting to Render PostgreSQL to fetch data for: {dropdown_value}...")
-    engine = create_engine(RENDER_EXTERNAL_DB_URL)
-
-    # Using text() and parameters protects against SQL injection and formatting issues
-    query = text(f'SELECT "TIMESTAMP", "CUR_FUT_EXPIRY_DT","NEAR_FUT_EXPIRY_DT", '
-                 f'"SYMBOL", "EQ_OPEN_PRICE", "EQ_HIGH_PRICE", "EQ_LOW_PRICE", "EQ_CLOSE_PRICE",'
-                 f'"EQ_TTL_TRD_QNTY", "EQ_DELIV_QTY", "EQ_DELIV_PER", "EQ_QT",'
-                 f'"CUR_PE_STRIKE_PR_OIMAX", "CUR_PE_STRIKE_PR_10MVOL",'
-                 f'"CUR_CE_STRIKE_PR_OIMAX", "CUR_CE_STRIKE_PR_10MVOL",'
-                 f'"NEAR_CE_STRIKE_PR_OIMAX", "NEAR_CE_STRIKE_PR_10MVOL",'
-                 f'"NEAR_PE_STRIKE_PR_OIMAX", "NEAR_PE_STRIKE_PR_10MVOL",'
-                 f'"CUR_PE_OI_SUM", "CUR_CE_OI_SUM",'
-                 f'"EQ_CHG_PER", "FUT_COI", "FUT_BUILD_UP","FUT_PRICE_COL", "FUT_COI_EXPLOSION_COL",'
-                 f'"CUR_PCR", "NEAR_PCR", "BAR", "QTCO0321", "QTCO0321COL" FROM postgresql_eq_fno_opt_master_data WHERE "SYMBOL" = :symbol ORDER BY "TIMESTAMP" DESC LIMIT {dropdown_n_days_value}')
-
-    print("Running query...")
-    # Execute the query and load the filtered results into a DataFrame
-    df_stock = pd.read_sql(query, con=engine, params={"symbol": dropdown_value})
-    df_stock.style.format({"TIMESTAMP": lambda t: t.strftime("%Y-%m-%d")})
-    df_stock['TIMESTAMP'] = pd.to_datetime(df_stock['TIMESTAMP'], dayfirst=True)
+    # # Import Data from Render Postgre SQL
+    # # _______________________________________________________________________________________________________________
+    # # 1. Retrieve your External Database URL from your Render.com dashboard.
+    # # It usually looks like: postgresql://user:password@external_host:port/database_name
+    # RENDER_EXTERNAL_DB_URL = "postgresql://prasenjit:rrbhbSbyRcNAQkmiPbjlLKkw4zwIKqxi@dpg-d8kkilho3t8c73eu0nu0-a.oregon-postgres.render.com/bigbullanalysis_db"
+    #
+    # print(f"Connecting to Render PostgreSQL to fetch data for: {dropdown_value}...")
+    # engine = create_engine(RENDER_EXTERNAL_DB_URL)
+    #
+    # # Using text() and parameters protects against SQL injection and formatting issues
+    # query = text(f'SELECT "TIMESTAMP", "CUR_FUT_EXPIRY_DT","NEAR_FUT_EXPIRY_DT", '
+    #              f'"SYMBOL", "EQ_OPEN_PRICE", "EQ_HIGH_PRICE", "EQ_LOW_PRICE", "EQ_CLOSE_PRICE",'
+    #              f'"EQ_TTL_TRD_QNTY", "EQ_DELIV_QTY", "EQ_DELIV_PER", "EQ_QT",'
+    #              f'"CUR_PE_STRIKE_PR_OIMAX", "CUR_PE_STRIKE_PR_10MVOL",'
+    #              f'"CUR_CE_STRIKE_PR_OIMAX", "CUR_CE_STRIKE_PR_10MVOL",'
+    #              f'"NEAR_CE_STRIKE_PR_OIMAX", "NEAR_CE_STRIKE_PR_10MVOL",'
+    #              f'"NEAR_PE_STRIKE_PR_OIMAX", "NEAR_PE_STRIKE_PR_10MVOL",'
+    #              f'"CUR_PE_OI_SUM", "CUR_CE_OI_SUM",'
+    #              f'"EQ_CHG_PER", "FUT_COI", "FUT_BUILD_UP","FUT_PRICE_COL", "FUT_COI_EXPLOSION_COL",'
+    #              f'"CUR_PCR", "NEAR_PCR", "BAR", "QTCO0321", "QTCO0321COL" FROM postgresql_eq_fno_opt_master_data WHERE "SYMBOL" = :symbol ORDER BY "TIMESTAMP" DESC LIMIT {dropdown_n_days_value}')
+    #
+    # print("Running query...")
+    # # Execute the query and load the filtered results into a DataFrame
+    # df_stock = pd.read_sql(query, con=engine, params={"symbol": dropdown_value})
+    # df_stock.style.format({"TIMESTAMP": lambda t: t.strftime("%Y-%m-%d")})
+    # df_stock['TIMESTAMP'] = pd.to_datetime(df_stock['TIMESTAMP'], dayfirst=True)
 
     df_stock = df_stock.sort_values(by='TIMESTAMP', ascending=True)
     df_stock= df_stock.tail(dropdown_n_days_value)
