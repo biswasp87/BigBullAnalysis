@@ -1,6 +1,7 @@
 from logging import exception
 
 import dash
+
 # To create meta tag for each page, define the title, image, and description.
 dash.register_page(
     __name__,
@@ -24,11 +25,17 @@ import asyncio
 from sqlalchemy import create_engine, text
 
 # _____________________________________________________________________________________
-# Pulling Data from Google Cloud Storage
+# Pulling Data from Google Cloud Storage & Initializing Global Clients / Caches
 # _____________________________________________________________________________________
 watchlist = pd.read_csv("gs://bba_support_files/WL_ALL.csv")
 dropdown_opt_list = pd.read_csv("gs://bba_support_files/Dropdown_options.csv")
 Expiry_Date_Monthly = pd.read_csv("gs://bba_support_files/stock_expiry_dates.csv")
+Local_Equity_Data = pd.read_csv("Master_Equity_Data.csv")
+
+# Global instances to optimize execution speed
+bq_client = bigquery.Client()
+STOCK_DATA_CACHE = {}
+WATCHLIST_CACHE = {}
 
 # _____________________________________________________________________________________
 # Layout for Order Placement inside Modal Layout
@@ -163,6 +170,15 @@ content_third_row = dbc.Row([
                                 ]),
                             ]),
                             dbc.Row([
+                                dcc.RadioItems(
+                                    id="data_source_select",
+                                    options=[
+                                        {"label": " BigQuery ", "value": "bq"},
+                                        {"label": " Local CSV ", "value": "local"},
+                                    ],
+                                    value="bq",  # Default selection
+                                    inline=True,
+                                )
                             ]),
                         ], title="Chart Settings"),
                         dbc.AccordionItem([
@@ -199,8 +215,8 @@ content_third_row = dbc.Row([
                                         'fontWeight': 'bold'
                                     },
                                     style_data={
-                                                    "textAlign": "left",
-                                                },
+                                        "textAlign": "left",
+                                    },
                                 ),
                                 html.Label(id='Shortlisted_BQ_Status'),
                                 html.Label(id='watch_stock_from_table')
@@ -219,8 +235,6 @@ content_third_row = dbc.Row([
     ], lg=2, xs=12)
 ])
 
-
-
 content = html.Div(
     [
         content_third_row,
@@ -229,6 +243,7 @@ content = html.Div(
 
 layout = html.Div([html.Br(), content, dcc.Store(id="df_shortlisted", data=[], storage_type='session')])
 
+
 # ____________________________________________________________________________________________
 # Update Watchlist Values as per the selected watchlist
 # ____________________________________________________________________________________________
@@ -236,20 +251,27 @@ layout = html.Div([html.Br(), content, dcc.Store(id="df_shortlisted", data=[], s
     Output('dropdown', 'options'),
     [Input('dropdown_opt', 'value')])
 def update_dropdown_list(dropdown_item_value):
-    dir_wl = "gs://bba_support_files/" + dropdown_item_value + '.csv'
-    wl = pd.read_csv(dir_wl)
+    if dropdown_item_value in WATCHLIST_CACHE:
+        wl = WATCHLIST_CACHE[dropdown_item_value]
+    else:
+        dir_wl = "gs://bba_support_files/" + dropdown_item_value + '.csv'
+        wl = pd.read_csv(dir_wl)
+        WATCHLIST_CACHE[dropdown_item_value] = wl
     options = [{'label': x, 'value': x} for x in wl['Symbol']]
     return options
+
+
 # ____________________________________________________________________________________________
 # Update Expiry Date Values
 # ____________________________________________________________________________________________
 @callback(
     Output('dropdown_exp', 'options'),
     [Input('dropdown_opt', 'value')])
-def update_dropdown_list(dropdown_item_value):
-    exp_dates = pd.read_csv("gs://bba_support_files/stock_expiry_dates.csv")
-    options = [{'label': x, 'value': x} for x in exp_dates['NEAR_FUT_EXPIRY_DT']]
+def update_dropdown_list_exp(dropdown_item_value):
+    # Optimized to use the preloaded module-level DataFrame instead of hitting GCS again
+    options = [{'label': x, 'value': x} for x in Expiry_Date_Monthly['NEAR_FUT_EXPIRY_DT']]
     return options
+
 
 # ____________________________________________________________________________________________
 # Callback function to fetch Previous and Next Symbol from the selected Watchlist
@@ -269,8 +291,14 @@ def update_dropdown(n_clicks, n_clicks_next, dropdown_value, dropdown_opt_val, s
 
     ctx = dash.callback_context
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    dropdown_opt_val = "gs://bba_support_files/" + dropdown_opt_val + str('.csv')
-    wl = pd.read_csv(dropdown_opt_val)
+
+    # Using the local watchlist cache to optimize Prev/Next transitions
+    if dropdown_opt_val in WATCHLIST_CACHE:
+        wl = WATCHLIST_CACHE[dropdown_opt_val]
+    else:
+        dropdown_opt_path = "gs://bba_support_files/" + dropdown_opt_val + str('.csv')
+        wl = pd.read_csv(dropdown_opt_path)
+        WATCHLIST_CACHE[dropdown_opt_val] = wl
 
     if trigger_id == 'submit_button':
         cur_position = wl[wl['Symbol'] == dropdown_value].index[0]
@@ -289,6 +317,7 @@ def update_dropdown(n_clicks, n_clicks_next, dropdown_value, dropdown_opt_val, s
         value_analysis = dropdown_value
     return value_analysis
 
+
 # _____________________________________________________________________________________
 # FAVOURITE Stocks Selection and Management
 # _____________________________________________________________________________________
@@ -302,6 +331,7 @@ def update_shortlisted_stock_table(shortlisted_table_data):
     return [{'name': i, 'id': i, 'deletable': True} for i in latest_table_df.columns if i != 'id'], \
         latest_table_df.to_dict('records')
 
+
 @callback(
     Output('df_shortlisted', 'data'),
     State('df_shortlisted', 'data'),
@@ -313,12 +343,11 @@ def update_shortlisted_stock_table(shortlisted_table_data):
 def shortlisted_stock_data(df_shortlisted, Add_clicks, Clear_clicks, Save_Clicks, Stock_name):
     existing_shortlisted_df = pd.DataFrame(df_shortlisted)
     if existing_shortlisted_df.empty:
-        client = bigquery.Client()
         sql_shortlisted = f"""
             SELECT *
             FROM `phrasal-fire-373510.Watchlist.Shortlisted`
         """
-        existing_shortlisted_df = client.query(sql_shortlisted).to_dataframe()
+        existing_shortlisted_df = bq_client.query(sql_shortlisted).to_dataframe()
         if existing_shortlisted_df.empty:
             existing_shortlisted_df = pd.DataFrame(columns=['FAVOURITE'])
             print(existing_shortlisted_df)
@@ -336,13 +365,13 @@ def shortlisted_stock_data(df_shortlisted, Add_clicks, Clear_clicks, Save_Clicks
         return vertical_concat.to_dict('records')
     elif trigger_id == 'Clear_Button':
         existing_shortlisted_df = pd.DataFrame(columns=['FAVOURITE'])
-        client = bigquery.Client()
         clear_dml_statement = ("TRUNCATE TABLE phrasal-fire-373510.Watchlist.Shortlisted")
-        clear_job = client.query(clear_dml_statement)
+        clear_job = bq_client.query(clear_dml_statement)
         clear_job.result()
         return existing_shortlisted_df.to_dict('records')
     else:
         return existing_shortlisted_df.to_dict('records')
+
 
 @callback(
     Output('Shortlisted_BQ_Status', 'children'),
@@ -355,7 +384,6 @@ def shortlisted_BQ_save(shortlisted_saved_df, n_click_save):
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
     if trigger_id == 'Save_Button':
-        client = bigquery.Client()
         try:
             table_id = "phrasal-fire-373510.Watchlist.Shortlisted"
             # project = "WRITE_APPEND"
@@ -366,21 +394,21 @@ def shortlisted_BQ_save(shortlisted_saved_df, n_click_save):
                 ],
                 write_disposition=project, )
             try:
-                client.get_table(table_id)  # Make an API request.
+                bq_client.get_table(table_id)  # Make an API request.
                 # Upload Current Dataframe
-                job = client.load_table_from_dataframe(shortlisted_saved_df, table_id,
-                                                       job_config=job_config)  # Make an API request.
+                job = bq_client.load_table_from_dataframe(shortlisted_saved_df, table_id,
+                                                          job_config=job_config)  # Make an API request.
                 job.result()  # Wait for the job to complete.
-                table = client.get_table(table_id)  # Make an API request.
+                table = bq_client.get_table(table_id)  # Make an API request.
                 message = "List Saved"
 
             except NotFound:
-                client.create_table(table_id)  # API request
+                bq_client.create_table(table_id)  # API request
                 # Upload Current Dataframe
-                job = client.load_table_from_dataframe(shortlisted_saved_df, table_id,
-                                                       job_config=job_config)  # Make an API request.
+                job = bq_client.load_table_from_dataframe(shortlisted_saved_df, table_id,
+                                                          job_config=job_config)  # Make an API request.
                 job.result()  # Wait for the job to complete.
-                table = client.get_table(table_id)  # Make an API request.
+                table = bq_client.get_table(table_id)  # Make an API request.
                 message = "List Saved"
         except Exception as e:
             print(f"***** ERROR at fetching : {e} ****")  # Print the ERROR Message
@@ -389,13 +417,15 @@ def shortlisted_BQ_save(shortlisted_saved_df, n_click_save):
         message = 'Click on SAVE'
     return message
 
+
 # _____________________________________________________________________________________
 # DISPLAY Graph
 # _____________________________________________________________________________________
 @callback(
     Output('graph_31', 'figure'),
     Output('df_indicator', 'data'),
-    [Input('dropdown_exp', 'value'),
+    [Input("data_source_select", "value"),
+     Input('dropdown_exp', 'value'),
      Input('dropdown', 'value'),
      Input('dropdown_opt', 'value'),
      Input('dropdown_n_days', 'value'),
@@ -405,77 +435,58 @@ def shortlisted_BQ_save(shortlisted_saved_df, n_click_save):
      Input('my-range-slider', 'value'),
      Input('b_band_limit', 'value'),
      Input('kc_limit', 'value')])
-def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, dropdown_n_days_value,
-                    short_sma, medium_sma, long_sma, graph_height,b_band,kc):
+def update_graph_31(data_source, dropdown_exp_value, dropdown_value, dropdown_opt_value, dropdown_n_days_value,
+                    short_sma, medium_sma, long_sma, graph_height, b_band, kc):
     expiry_date = datetime.strptime(dropdown_exp_value, "%Y-%m-%d").date()
+    if data_source == "bq":
+        if dropdown_value in STOCK_DATA_CACHE:
+            # Load instantly from RAM if the stock was already queried
+            df_stock = STOCK_DATA_CACHE[dropdown_value].copy()
+        else:
+            # Import Data from Big Query with a fixed max history (150 days) to optimize parameter tweaks
+            # _______________________________________________________________________________________________________________
+            sql_stock = f"""
+                SELECT TIMESTAMP, CUR_FUT_EXPIRY_DT,NEAR_FUT_EXPIRY_DT,
+                                    SYMBOL, EQ_OPEN_PRICE, EQ_HIGH_PRICE, EQ_LOW_PRICE, EQ_CLOSE_PRICE,
+                                    EQ_TTL_TRD_QNTY, EQ_DELIV_QTY, EQ_DELIV_PER, EQ_QT,
+                                    CUR_PE_STRIKE_PR_OIMAX, CUR_PE_STRIKE_PR_10MVOL,
+                                    CUR_CE_STRIKE_PR_OIMAX, CUR_CE_STRIKE_PR_10MVOL,
+                                    NEAR_CE_STRIKE_PR_OIMAX, NEAR_CE_STRIKE_PR_10MVOL,
+                                    NEAR_PE_STRIKE_PR_OIMAX, NEAR_PE_STRIKE_PR_10MVOL,
+                                    CUR_PE_OI_SUM, CUR_CE_OI_SUM,
+                                    EQ_CHG_PER, FUT_COI, FUT_BUILD_UP,FUT_PRICE_COL, FUT_COI_EXPLOSION_COL,
+                                    CUR_PCR, NEAR_PCR, BAR, QTCO0321, QTCO0321COL
+                FROM `phrasal-fire-373510.Big_Bull_Analysis.Master_Data_Equity`
+                WHERE SYMBOL = '{dropdown_value}'
+                ORDER BY TIMESTAMP DESC LIMIT 150
+            """
+            df_stock = bq_client.query(sql_stock).to_dataframe()
+            STOCK_DATA_CACHE[dropdown_value] = df_stock.copy()
+    else:
+        # Import Data from Local Machine
+        # _______________________________________________________________________________________________________________
+        df_stock = Local_Equity_Data[Local_Equity_Data['SYMBOL'] == dropdown_value].copy()
 
-    # Import Data from Big Query
-    # _______________________________________________________________________________________________________________
-    client = bigquery.Client()
-    sql_stock = f"""
-        SELECT TIMESTAMP, CUR_FUT_EXPIRY_DT,NEAR_FUT_EXPIRY_DT, 
-                            SYMBOL, EQ_OPEN_PRICE, EQ_HIGH_PRICE, EQ_LOW_PRICE, EQ_CLOSE_PRICE,
-                            EQ_TTL_TRD_QNTY, EQ_DELIV_QTY, EQ_DELIV_PER, EQ_QT,
-                            CUR_PE_STRIKE_PR_OIMAX, CUR_PE_STRIKE_PR_10MVOL,
-                            CUR_CE_STRIKE_PR_OIMAX, CUR_CE_STRIKE_PR_10MVOL,
-                            NEAR_CE_STRIKE_PR_OIMAX, NEAR_CE_STRIKE_PR_10MVOL,
-                            NEAR_PE_STRIKE_PR_OIMAX, NEAR_PE_STRIKE_PR_10MVOL,
-                            CUR_PE_OI_SUM, CUR_CE_OI_SUM,
-                            EQ_CHG_PER, FUT_COI, FUT_BUILD_UP,FUT_PRICE_COL, FUT_COI_EXPLOSION_COL,
-                            CUR_PCR, NEAR_PCR, BAR, QTCO0321, QTCO0321COL
-        FROM `phrasal-fire-373510.Big_Bull_Analysis.Master_Data_Equity`
-        WHERE SYMBOL = '{dropdown_value}'
-        ORDER BY TIMESTAMP DESC LIMIT {dropdown_n_days_value}
-    """
-    df_stock = client.query(sql_stock).to_dataframe()
-
-    # # Import Data from Cloud storage Bucket (JSON)
-    # # _______________________________________________________________________________________________________________
-    # gcs_path = "gs://json_eq_fno_opt_master_data/stocks/" + dropdown_value+ ".json"
-    # # Read directly into a DataFrame
-    # df_stock = pd.read_json(gcs_path)
-
-    # # Import Data from Render Postgre SQL
-    # # _______________________________________________________________________________________________________________
-    # # 1. Retrieve your External Database URL from your Render.com dashboard.
-    # # It usually looks like: postgresql://user:password@external_host:port/database_name
-    # RENDER_EXTERNAL_DB_URL = "postgresql://prasenjit:rrbhbSbyRcNAQkmiPbjlLKkw4zwIKqxi@dpg-d8kkilho3t8c73eu0nu0-a.oregon-postgres.render.com/bigbullanalysis_db"
-    #
-    # print(f"Connecting to Render PostgreSQL to fetch data for: {dropdown_value}...")
-    # engine = create_engine(RENDER_EXTERNAL_DB_URL)
-    #
-    # # Using text() and parameters protects against SQL injection and formatting issues
-    # query = text(f'SELECT "TIMESTAMP", "CUR_FUT_EXPIRY_DT","NEAR_FUT_EXPIRY_DT", '
-    #              f'"SYMBOL", "EQ_OPEN_PRICE", "EQ_HIGH_PRICE", "EQ_LOW_PRICE", "EQ_CLOSE_PRICE",'
-    #              f'"EQ_TTL_TRD_QNTY", "EQ_DELIV_QTY", "EQ_DELIV_PER", "EQ_QT",'
-    #              f'"CUR_PE_STRIKE_PR_OIMAX", "CUR_PE_STRIKE_PR_10MVOL",'
-    #              f'"CUR_CE_STRIKE_PR_OIMAX", "CUR_CE_STRIKE_PR_10MVOL",'
-    #              f'"NEAR_CE_STRIKE_PR_OIMAX", "NEAR_CE_STRIKE_PR_10MVOL",'
-    #              f'"NEAR_PE_STRIKE_PR_OIMAX", "NEAR_PE_STRIKE_PR_10MVOL",'
-    #              f'"CUR_PE_OI_SUM", "CUR_CE_OI_SUM",'
-    #              f'"EQ_CHG_PER", "FUT_COI", "FUT_BUILD_UP","FUT_PRICE_COL", "FUT_COI_EXPLOSION_COL",'
-    #              f'"CUR_PCR", "NEAR_PCR", "BAR", "QTCO0321", "QTCO0321COL" FROM postgresql_eq_fno_opt_master_data WHERE "SYMBOL" = :symbol ORDER BY "TIMESTAMP" DESC LIMIT {dropdown_n_days_value}')
-    #
-    # print("Running query...")
-    # # Execute the query and load the filtered results into a DataFrame
-    # df_stock = pd.read_sql(query, con=engine, params={"symbol": dropdown_value})
-    # df_stock.style.format({"TIMESTAMP": lambda t: t.strftime("%Y-%m-%d")})
-    # df_stock['TIMESTAMP'] = pd.to_datetime(df_stock['TIMESTAMP'], dayfirst=True)
-
+    df_stock.style.format({"TIMESTAMP": lambda t: t.strftime("%Y-%m-%d")})
+    df_stock['TIMESTAMP'] = pd.to_datetime(df_stock['TIMESTAMP'], dayfirst=True, format='mixed')
     df_stock = df_stock.sort_values(by='TIMESTAMP', ascending=True)
-    df_stock= df_stock.tail(dropdown_n_days_value)
+
+    # In-memory slice based on user choice (extremely fast)
+    df_stock = df_stock.tail(dropdown_n_days_value)
     df_stock["BAR"] = df_stock["BAR"].astype(int)
     df_stock = df_stock.reset_index()
 
     # PRICE STRENGTH INDICATOR___________________________________________________________
     df_stock["CLOSE_MA_S"] = df_stock["EQ_CLOSE_PRICE"].rolling(short_sma).mean()
     df_stock["CLOSE_MA_M"] = df_stock["EQ_CLOSE_PRICE"].rolling(medium_sma).mean()
-    df_stock["CLOSE_MA_COL"] = np.where((df_stock["CLOSE_MA_S"] > df_stock["CLOSE_MA_M"].shift(short_sma)), 'green', 'white')
+    df_stock["CLOSE_MA_COL"] = np.where((df_stock["CLOSE_MA_S"] > df_stock["CLOSE_MA_M"].shift(short_sma)), 'green',
+                                        'white')
 
     # VOLUME STRENGTH INDICATOR___________________________________________________________
     df_stock["VOLUME_MA_S"] = df_stock["EQ_TTL_TRD_QNTY"].rolling(short_sma).mean()
     df_stock["VOLUME_MA_M"] = df_stock["EQ_TTL_TRD_QNTY"].rolling(medium_sma).mean()
-    df_stock["VOLUME_MA_COL"] = np.where((df_stock["VOLUME_MA_S"] > df_stock["VOLUME_MA_M"].shift(short_sma)), 'green', 'white')
+    df_stock["VOLUME_MA_COL"] = np.where((df_stock["VOLUME_MA_S"] > df_stock["VOLUME_MA_M"].shift(short_sma)), 'green',
+                                         'white')
 
     # Q/T STRENGTH INDICATOR___________________________________________________________
     df_stock["QT_MA_S"] = df_stock["EQ_QT"].rolling(short_sma).mean()
@@ -487,7 +498,8 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
                                "EQ_HIGH_PRICE", "EQ_LOW_PRICE",
                                "CUR_PE_STRIKE_PR_10MVOL", "CUR_CE_STRIKE_PR_10MVOL",
                                "NEAR_PE_STRIKE_PR_10MVOL", "NEAR_CE_STRIKE_PR_10MVOL"]]
-        columns = ["CUR_PE_STRIKE_PR_10MVOL", "CUR_CE_STRIKE_PR_10MVOL", "NEAR_PE_STRIKE_PR_10MVOL", "NEAR_CE_STRIKE_PR_10MVOL"]
+        columns = ["CUR_PE_STRIKE_PR_10MVOL", "CUR_CE_STRIKE_PR_10MVOL", "NEAR_PE_STRIKE_PR_10MVOL",
+                   "NEAR_CE_STRIKE_PR_10MVOL"]
         exploded = [
             df_10M_VOL[col].str.strip("[]").str.split(",", expand=True).stack().rename(col)
             for col in columns
@@ -499,7 +511,8 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
         if dropdown_exp_value != "ALL":
             df_10M_VOL = df_10M_VOL[df_10M_VOL.CUR_FUT_EXPIRY_DT == expiry_date]
             df_10M_VOL = df_10M_VOL.astype(str).replace('nan', 'None')
-            df_10M_VOL = df_10M_VOL[(df_10M_VOL["CUR_PE_STRIKE_PR_10MVOL"] != 'None') | (df_10M_VOL["CUR_CE_STRIKE_PR_10MVOL"] != 'None')]
+            df_10M_VOL = df_10M_VOL[
+                (df_10M_VOL["CUR_PE_STRIKE_PR_10MVOL"] != 'None') | (df_10M_VOL["CUR_CE_STRIKE_PR_10MVOL"] != 'None')]
             df_10M_VOL["ENTRY_BO"] = float(df_10M_VOL['EQ_HIGH_PRICE'].iloc[0])
             df_10M_VOL["ENTRY_BD"] = float(df_10M_VOL['EQ_LOW_PRICE'].iloc[0])
     except Exception:
@@ -512,9 +525,9 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
                                            'ENTRY_BO', 'ENTRY_BD'])
     df_store = df_stock.iloc[[-1]]
     if not df_10M_VOL.empty:
-        df_store["10M_VOL_TIMESTAMP"] = df_10M_VOL['TIMESTAMP'].iloc[0]
+        df_store.loc[:, "10M_VOL_TIMESTAMP"] = df_10M_VOL['TIMESTAMP'].loc[df_10M_VOL.index[0]]
     else:
-        df_store["10M_VOL_TIMESTAMP"] = 'NA'
+        df_store.loc[:, "10M_VOL_TIMESTAMP"] = 'NA'
 
     if graph_height[0] == 800:
         row_height_values = [0.605, 0.075, 0.075, 0.075, 0.02, 0.09, 0.02, 0.02, 0.02]
@@ -531,8 +544,6 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     fig.update_layout(paper_bgcolor='rgb(255,255,255)', plot_bgcolor='rgb(255,255,255)', height=graph_height[0])
     fig.update_layout(margin=dict(r=2, t=2, b=2, l=2))
     fig.update_xaxes(showline=True, linewidth=2, linecolor='black')
-    # fig.update_yaxes(range=[0, 100], row=2, col=1)
-    # fig.update_yaxes(mirror=True, row=1, col=1)
     fig.update_yaxes(mirror="ticks", side='right')
     fig.update_yaxes(showticklabels=False, row=5, col=1)
     fig.update_layout(yaxis3=dict(showticklabels=False), yaxis6=dict(showticklabels=False),
@@ -575,11 +586,13 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
                   row=1, col=1)
     # Add ENTRY Lines.....................
     fig.add_trace(
-        go.Scatter(x=df_10M_VOL['TIMESTAMP'], y=df_10M_VOL['ENTRY_BO'], mode='lines', name='Entry', line=dict(color='black')),
+        go.Scatter(x=df_10M_VOL['TIMESTAMP'], y=df_10M_VOL['ENTRY_BO'], mode='lines', name='Entry',
+                   line=dict(color='black')),
         row=1, col=1)
     # Add SL Lines
     fig.add_trace(
-        go.Scatter(x=df_10M_VOL['TIMESTAMP'], y=df_10M_VOL['ENTRY_BD'], mode='lines', name='SL', line=dict(color='black')),
+        go.Scatter(x=df_10M_VOL['TIMESTAMP'], y=df_10M_VOL['ENTRY_BD'], mode='lines', name='SL',
+                   line=dict(color='black')),
         row=1, col=1)
     # Add Volume as Subplot
     fig.add_trace(
@@ -589,7 +602,7 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     fig.add_trace(go.Scatter(x=df_stock['TIMESTAMP'], y=df_stock.EQ_TTL_TRD_QNTY.rolling(20).mean(), name='20SMA Vol'),
                   row=2, col=1)
     fig.add_trace(
-        go.Bar(x=df_stock['TIMESTAMP'], y=df_stock['EQ_DELIV_QTY'], name='Del Qty',offsetgroup=1),
+        go.Bar(x=df_stock['TIMESTAMP'], y=df_stock['EQ_DELIV_QTY'], name='Del Qty', offsetgroup=1),
         row=2, col=1)
     # Add Delivery% as Subplot
     fig.add_trace(
@@ -612,7 +625,8 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
         row=3, col=1)
     # Add COI to Subplot
     fig.add_trace(
-        go.Scatter(x=df_stock['TIMESTAMP'], y=df_stock['FUT_COI'], name='COI',mode='lines+markers', marker=dict(size=10, color=df_stock['FUT_PRICE_COL'])),
+        go.Scatter(x=df_stock['TIMESTAMP'], y=df_stock['FUT_COI'], name='COI', mode='lines+markers',
+                   marker=dict(size=10, color=df_stock['FUT_PRICE_COL'])),
         row=4, col=1)
     fig.add_trace(
         go.Scatter(x=df_stock['TIMESTAMP'], y=df_stock['BAR'], mode='markers',
@@ -664,9 +678,10 @@ def update_graph_31(dropdown_exp_value, dropdown_value, dropdown_opt_value, drop
     fig['layout']['yaxis4']['title'] = 'Q/T'
     fig['layout']['yaxis5']['title'] = 'COI'
     fig['layout']['yaxis7']['title'] = 'PCR'
-    LTP=df_stock['EQ_CLOSE_PRICE'].iloc[-1]
-    LTP_PREV=df_stock['EQ_CLOSE_PRICE'].iloc[-2]
-    PER_CHNG=((LTP-LTP_PREV)/LTP*100).round(1)
-    fig.update_layout(xaxis_title=dropdown_value+str(" LTP: ")+str(LTP)+str(" Change: ")+str(PER_CHNG)+str("%"))
+    LTP = df_stock['EQ_CLOSE_PRICE'].iloc[-1]
+    LTP_PREV = df_stock['EQ_CLOSE_PRICE'].iloc[-2]
+    PER_CHNG = ((LTP - LTP_PREV) / LTP * 100).round(1)
+    fig.update_layout(
+        xaxis_title=dropdown_value + str(" LTP: ") + str(LTP) + str(" Change: ") + str(PER_CHNG) + str("%"))
 
     return fig, df_store.to_dict('records')

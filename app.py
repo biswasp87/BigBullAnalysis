@@ -6,12 +6,12 @@ from dash import dcc, html
 from dash.dependencies import Input, Output, State
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CERULEAN], use_pages=True)
-auth = dash_auth.BasicAuth(
-    app,
-    {'biswasp87': 'hello1234',
-     'pajaroloco': 'unsecreto',
-     'test': 'test'}
-)
+# auth = dash_auth.BasicAuth(
+#     app,
+#     {'biswasp87': 'hello1234',
+#      'pajaroloco': 'unsecreto',
+#      'test': 'test'}
+# )
 
 navbar = dbc.Navbar(
     dbc.Container(
