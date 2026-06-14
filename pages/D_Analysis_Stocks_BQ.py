@@ -1,4 +1,4 @@
-from logging import exception
+from logging import exception, error
 
 import dash
 
@@ -30,7 +30,9 @@ from sqlalchemy import create_engine, text
 watchlist = pd.read_csv("gs://bba_support_files/WL_ALL.csv")
 dropdown_opt_list = pd.read_csv("gs://bba_support_files/Dropdown_options.csv")
 Expiry_Date_Monthly = pd.read_csv("gs://bba_support_files/stock_expiry_dates.csv")
-Local_Equity_Data = pd.read_csv("Master_Equity_Data.csv")
+
+try: Local_Equity_Data = pd.read_csv("Master_Equity_Data.csv")
+except Exception as e: print(e)
 
 # Global instances to optimize execution speed
 bq_client = bigquery.Client()
@@ -538,7 +540,7 @@ def update_graph_31(data_source, dropdown_exp_value, dropdown_value, dropdown_op
         rows=9, cols=1,
         row_heights=row_height_values,
         specs=[[{}], [{"secondary_y": True}], [{}], [{}], [{}], [{"secondary_y": True}], [{}], [{}], [{}]],
-        print_grid=True, shared_xaxes=True, horizontal_spacing=0.05, vertical_spacing=0)
+        print_grid=False, shared_xaxes=True, horizontal_spacing=0.05, vertical_spacing=0)
 
     config = dict({'scrollZoom': True})
     fig.update_layout(paper_bgcolor='rgb(255,255,255)', plot_bgcolor='rgb(255,255,255)', height=graph_height[0])
