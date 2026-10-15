@@ -9,6 +9,7 @@ import dash
 from dash import dcc, html, Input, Output, State, dash_table
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
+from pandas.core.common import not_none
 from plotly.subplots import make_subplots
 import numpy as np
 import json
@@ -18,12 +19,6 @@ import time
 from dash import dash_table as dt
 from google.cloud import bigquery
 import re
-
-try:                                   # optional: load secrets from a .env file (local runs / Secret Manager mount)
-    from dotenv import load_dotenv
-    load_dotenv(os.environ.get("ENV_FILE", ".env"))
-except ImportError:
-    pass
 
 
 # if os.path.exists(f"AccessToken/{datetime.datetime.now().date()}.json"):
@@ -81,7 +76,8 @@ DEFAULT_TOKEN = get_token_from_gcs("bba_access_token")
 # _____________________________________________________________________________________
 # Zerodha Kite Connect Alert Configurations
 # _____________________________________________________________________________________
-KITE_API_KEY = os.environ.get("KITE_API_KEY", "")
+KITE_API_KEY = "njg16v6xxfb7iorf"
+# KITE_ACCESS_TOKEN = "8x31Qizca4yF0xlfIbJPUjkdhO307LIU"
 KITE_ACCESS_TOKEN = get_zerodha_token_from_gcs("bba_access_token")
 
 KITE_ALERTS_URL = "https://api.kite.trade/alerts"
@@ -460,7 +456,6 @@ def _rh_group(label, key):
 
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
-server = app.server                           # gunicorn entry point:  gunicorn app:server
 
 # =====================================================================
 # POP-OUT WINDOWS for the Trend Analytics graphs (drag the window to a second monitor).
@@ -3478,4 +3473,4 @@ def filter_trading_symbol_options(search_value):
 
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    app.run(debug=False, host="0.0.0.0", port=8080)
