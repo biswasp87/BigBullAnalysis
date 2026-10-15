@@ -21,13 +21,6 @@ from google.cloud import bigquery
 import re
 
 
-# if os.path.exists(f"AccessToken/{datetime.datetime.now().date()}.json"):
-#     with open(f"AccessToken/{datetime.datetime.now().date()}.json", "r") as f:
-#         DEFAULT_TOKEN = json.load(f)
-#         print(DEFAULT_TOKEN)
-# else:
-#     print("Generate Access Token")
-
 def get_token_from_gcs(bucket_name, filename=None):
     """Retrieves the access token string from a JSON file in GCS.
 
@@ -43,6 +36,7 @@ def get_token_from_gcs(bucket_name, filename=None):
 
         # Download file contents and parse JSON
         token_data = json.loads(blob.download_as_text())
+        print(token_data.get("access_token"))
         return token_data.get("access_token")
 
     except Exception as e:
@@ -72,6 +66,7 @@ def get_zerodha_token_from_gcs(bucket_name, filename=None):
 
 
 DEFAULT_TOKEN = get_token_from_gcs("bba_access_token")
+print(DEFAULT_TOKEN)
 
 # _____________________________________________________________________________________
 # Zerodha Kite Connect Alert Configurations
@@ -189,12 +184,6 @@ def fetch_zerodha_filtered_symbols():
         response = requests.get(url)
         response.raise_for_status()
         df = pd.read_csv(io.StringIO(response.text))
-        # 1. In Exchange column filter NSE & NFO
-        # 2. In segment filter NSE, NSE-OPT, NSE-FUT
-        # filtered_df = df[
-        #     (df['exchange'].isin(['NFO', 'NSE'])) &
-        #     (df['segment'].isin(['NSE', 'NSE-OPT', 'NSE-FUT']))
-        #     ]
         filtered_df = df[
             (df['exchange'].isin(['NFO', 'NSE']))
             ]
