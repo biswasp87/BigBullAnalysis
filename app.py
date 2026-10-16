@@ -212,6 +212,7 @@ def get_access_token():
             client = storage.Client()
             bucket = client.bucket(bucket_name)
             blob = bucket.blob('access_token.txt')
+            print(blob.download_as_text().strip())              #Added for Debug
             return blob.download_as_text().strip()
     except Exception as e:
         print(f"Error fetching token from GCS: {e}")
@@ -253,6 +254,7 @@ def fetch_and_prepare_data():
         response = requests.get(NSE_NIFTY_500_URL, headers=headers)
         response.raise_for_status()
         nifty500_df = pd.read_csv(io.StringIO(response.text))
+        print(nifty500_df)              #Added for Debug
     except Exception as e:
         print(f"Error fetching NIFTY 500: {e}")
         return pd.DataFrame()
