@@ -429,6 +429,165 @@ def fetch_market_quotes(instrument_keys):
     return all_data
 
 
+# _____________________________________________________________________________________
+# LIVE DAILY-CANDLE HELPERS  (Upstox quote -> one daily row, merged WITHOUT duplicates)
+# _____________________________________________________________________________________
+_IST = "Asia/Kolkata"
+_LIVE_CACHE = {}          # instrument_key -> (fetched_at_epoch, row-or-None)
+_LIVE_CACHE_TTL = 8       # seconds; the stream interval can fire every 3 s for several graphs
+
+
+def _find_quote(quotes_data, instrument_key):
+    q = quotes_data.get(instrument_key)
+    if q:
+        return q
+    tail = instrument_key.split('|')[-1]
+    for k, v in quotes_data.items():
+        if v.get('instrument_token') == instrument_key or k.endswith(tail):
+            return v
+    return None
+
+
+def _quote_trade_date(q):
+    """Trading date (tz-naive, midnight) of a full-market-quote, or None when it cannot be determined.
+    Uses the quote's own time stamp - NOT the PC clock - so a weekend / holiday / pre-open quote that still carries the
+    previous session's data is never booked as 'today'."""
+    for field in ("last_trade_time", "timestamp"):
+        raw = q.get(field)
+        if raw in (None, "", 0, "0"):
+            continue
+        try:
+            if isinstance(raw, (int, float)) or str(raw).isdigit():
+                ts = pd.Timestamp(int(raw), unit="ms", tz="UTC").tz_convert(_IST)
+            else:
+                ts = pd.Timestamp(raw)
+                ts = ts.tz_convert(_IST) if ts.tzinfo else ts.tz_localize(_IST)
+            return ts.tz_localize(None).normalize()
+        except Exception:
+            continue
+    return None
+
+
+def get_live_daily_row(instrument_key):
+    """Today's (or the latest session's) daily candle from the market quote as {'timestamp','open','high','low','close',
+    'volume','oi'}, or None. Short TTL cache so several graphs / refreshes share one API call."""
+    now = time.time()
+    hit = _LIVE_CACHE.get(instrument_key)
+    if hit and now - hit[0] < _LIVE_CACHE_TTL:
+        return hit[1]
+    row = None
+    try:
+        q = _find_quote(fetch_market_quotes([instrument_key]), instrument_key)
+        if q:
+            ohlc = q.get('ohlc') or {}
+            close = q.get('last_price')
+            trade_date = _quote_trade_date(q)
+            if trade_date is None:                      # no usable time stamp: only trust a weekday after 09:15 IST
+                n = pd.Timestamp.now(tz=_IST)
+                if n.weekday() < 5 and (n.hour, n.minute) >= (9, 15):
+                    trade_date = n.tz_localize(None).normalize()
+            vals = [ohlc.get('open'), ohlc.get('high'), ohlc.get('low'), close]
+            if trade_date is not None and all(v not in (None, 0) for v in vals):
+                row = {'timestamp': trade_date, 'open': ohlc.get('open'), 'high': ohlc.get('high'),
+                       'low': ohlc.get('low'), 'close': close, 'volume': q.get('volume'), 'oi': q.get('oi')}
+    except Exception as e:
+        print(f"Live row fetch failed for {instrument_key}: {e}")
+    _LIVE_CACHE[instrument_key] = (now, row)
+    return row
+
+
+def merge_live_row(df, live_row):
+    """Merge the live quote row into the historical candles - exactly ONE row per calendar day.
+    * all timestamps are normalised to tz-naive midnight first (historical = tz-aware '+05:30', quote = naive; the old
+      mix is what produced two candles for the same day)
+    * same day already present -> the live values REPLACE that row; newer day -> appended; older day -> ignored."""
+    if df is None:
+        df = pd.DataFrame()
+    if not df.empty:
+        df = df.copy()
+        ts = pd.to_datetime(df['timestamp'], utc=False)
+        if getattr(ts.dt, 'tz', None) is not None:
+            ts = ts.dt.tz_localize(None)
+        df['timestamp'] = ts.dt.normalize()
+        df = df.drop_duplicates('timestamp', keep='last').sort_values('timestamp').reset_index(drop=True)
+        for c in df.columns.drop('timestamp'):           # float columns so live values (e.g. 3.5) can overwrite ints
+            df[c] = pd.to_numeric(df[c], errors='coerce').astype(float)
+    if live_row:
+        day = pd.Timestamp(live_row['timestamp']).normalize()
+        if df.empty:
+            df = pd.DataFrame([{**live_row, 'timestamp': day}])
+        elif day == df['timestamp'].iloc[-1]:
+            for k, v in live_row.items():
+                if k != 'timestamp' and v is not None:
+                    df.loc[df.index[-1], k] = v
+        elif day > df['timestamp'].iloc[-1]:
+            df = pd.concat([df, pd.DataFrame([{**live_row, 'timestamp': day}])], ignore_index=True)
+    return df
+
+
+def fetch_daily_with_live(instrument_key):
+    """Historical daily candles + the live quote, de-duplicated (used by the CE / PE option graphs)."""
+    return merge_live_row(fetch_historical_v3(instrument_key), get_live_daily_row(instrument_key))
+
+
+def _expected_latest_session():
+    """Date of the newest trading session we should have data for (weekends skipped; exchange holidays are not known,
+    which only means one extra refresh attempt)."""
+    n = pd.Timestamp.now(tz=_IST)
+    d = n.tz_localize(None).normalize()
+    if d.weekday() < 5 and (n.hour, n.minute) >= (9, 15):
+        return d
+    d -= pd.Timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= pd.Timedelta(days=1)
+    return d
+
+
+def append_upstox_latest(df_stock, symbol):
+    """Bring the Stock Analysis data up to date with Upstox.
+    BigQuery is filled only after NSE publishes the bhav copy (late, at an uncertain time), so rows newer than the last
+    BigQuery date are built from Upstox: missing completed days from the daily history, today from the live quote.
+    Filled: OPEN / HIGH / LOW / CLOSE, traded volume, change %. NOT available from Upstox (left empty until the bhav copy
+    lands and BigQuery replaces the row): Q/T, delivery qty / %, COI / build-up, option strikes, PCR / OI sums.
+    Rows added here carry LIVE_ROW = True."""
+    df_stock = df_stock.copy()
+    df_stock['LIVE_ROW'] = False
+    try:
+        info = get_underlying_instrument_info(symbol)
+        if not info or df_stock.empty:
+            return df_stock
+        key = info['instrument_key']
+        last_day = pd.Timestamp(df_stock['TIMESTAMP'].max()).normalize()
+
+        new = []
+        if last_day < _expected_latest_session():
+            hist = fetch_historical_v3(key, from_date=(last_day + pd.Timedelta(days=1)).strftime('%Y-%m-%d'))
+            hist = merge_live_row(hist, None)
+            if not hist.empty:
+                new.extend(hist[hist['timestamp'] > last_day].to_dict('records'))
+        live = get_live_daily_row(key)
+        if live:
+            new = [r for r in new if pd.Timestamp(r['timestamp']).normalize() != pd.Timestamp(live['timestamp']).normalize()]
+            if pd.Timestamp(live['timestamp']).normalize() > last_day:
+                new.append(live)
+        if not new:
+            return df_stock
+
+        add = pd.DataFrame(new).rename(columns={'timestamp': 'TIMESTAMP', 'open': 'EQ_OPEN_PRICE',
+                                                'high': 'EQ_HIGH_PRICE', 'low': 'EQ_LOW_PRICE',
+                                                'close': 'EQ_CLOSE_PRICE', 'volume': 'EQ_TTL_TRD_QNTY'})
+        add = add[['TIMESTAMP', 'EQ_OPEN_PRICE', 'EQ_HIGH_PRICE', 'EQ_LOW_PRICE', 'EQ_CLOSE_PRICE', 'EQ_TTL_TRD_QNTY']]
+        add['LIVE_ROW'] = True
+        out = pd.concat([df_stock, add], ignore_index=True, sort=False).sort_values('TIMESTAMP')
+        for c in ('SYMBOL', 'CUR_FUT_EXPIRY_DT', 'NEAR_FUT_EXPIRY_DT'):      # identity columns carry forward
+            if c in out.columns:
+                out[c] = out[c].ffill()
+        return out.reset_index(drop=True)
+    except Exception as e:
+        print(f"Upstox top-up skipped for {symbol}: {e}")
+        return df_stock
+
+
 # Initialize Data
 INSTRUMENTS_DF = fetch_and_prepare_data()
 UNIQUE_SYMBOLS = sorted(INSTRUMENTS_DF['Symbol'].unique()) if not INSTRUMENTS_DF.empty else []
@@ -1413,10 +1572,16 @@ app.clientside_callback(
     prevent_initial_call=True
 )
 def toggle_settings_drawer(n_open, n_banner, is_open):
-    trig = dash.callback_context.triggered[0]["prop_id"].split(".")[0]
-    if trig == "btn-banner-open-tokens":
+    # The Offcanvas un-mounts its children while closed, so when it opens, 'settings-accordion' (an Output here) is
+    # created and Dash fires this callback once more with NO real click. The old code treated that as a toggle and shut
+    # the drawer again -> it "popped up and closed". The banner button re-created by the alert does the same with
+    # n_clicks=None. Act only on a real click, ignore everything else.
+    trig = dash.callback_context.triggered_id
+    if trig == "btn-banner-open-tokens" and n_banner:
         return True, "tokens"
-    return (not is_open), dash.no_update
+    if trig == "btn-open-settings" and n_open:
+        return (not is_open), dash.no_update
+    raise dash.exceptions.PreventUpdate
 
 
 # ---- Access tokens: check today's token files in GCS on load, every 5 min, and after each generation ----
@@ -1799,38 +1964,8 @@ def update_ce_graph(strike, n, underlying_info, stream_disabled):
         lot_size = 1
 
     instrument_key = match.iloc[0]['instrument_key']
-    df = fetch_historical_v3(instrument_key)
-
-    quotes_data = fetch_market_quotes([instrument_key])
-
-    q = quotes_data.get(instrument_key)
-    if not q:
-        for k, v in quotes_data.items():
-            if v.get('instrument_token') == instrument_key or k.endswith(instrument_key.split('|')[-1]):
-                q = v
-                break
-
-    if q:
-        ohlc = q.get('ohlc', {})
-        new_row = {
-            'timestamp': datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0),
-            'open': ohlc.get('open'),
-            'high': ohlc.get('high'),
-            'low': ohlc.get('low'),
-            'close': q.get('last_price'),
-            'volume': q.get('volume'),
-            'oi': q.get('oi')
-        }
-        today_ts = pd.to_datetime(new_row['timestamp'])
-        if not df.empty:
-            last_ts = pd.to_datetime(df.iloc[-1]['timestamp'])
-            if last_ts.date() == today_ts.date():
-                for k, v in new_row.items():
-                    df.iloc[-1, df.columns.get_loc(k)] = v
-            else:
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        else:
-            df = pd.DataFrame([new_row])
+    # historical candles + live quote merged into ONE row per day (no duplicate latest candle)
+    df = fetch_daily_with_live(instrument_key)
 
     if df.empty: return go.Figure()
 
@@ -1888,37 +2023,8 @@ def update_pe_graph(strike, n, underlying_info, stream_disabled):
         lot_size = 1
 
     instrument_key = match.iloc[0]['instrument_key']
-    df = fetch_historical_v3(instrument_key)
-
-    quotes_data = fetch_market_quotes([instrument_key])
-    q = quotes_data.get(instrument_key)
-    if not q:
-        for k, v in quotes_data.items():
-            if v.get('instrument_token') == instrument_key or k.endswith(instrument_key.split('|')[-1]):
-                q = v
-                break
-
-    if q:
-        ohlc = q.get('ohlc', {})
-        new_row = {
-            'timestamp': datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0),
-            'open': ohlc.get('open'),
-            'high': ohlc.get('high'),
-            'low': ohlc.get('low'),
-            'close': q.get('last_price'),
-            'volume': q.get('volume'),
-            'oi': q.get('oi')
-        }
-        today_ts = pd.to_datetime(new_row['timestamp'])
-        if not df.empty:
-            last_ts = pd.to_datetime(df.iloc[-1]['timestamp'])
-            if last_ts.date() == today_ts.date():
-                for k, v in new_row.items():
-                    df.iloc[-1, df.columns.get_loc(k)] = v
-            else:
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        else:
-            df = pd.DataFrame([new_row])
+    # historical candles + live quote merged into ONE row per day (no duplicate latest candle)
+    df = fetch_daily_with_live(instrument_key)
 
     if df.empty: return go.Figure()
 
@@ -2815,9 +2921,16 @@ def update_graph_31(data_source, dropdown_exp_value, dropdown_value, dropdown_n_
         raise dash.exceptions.PreventUpdate
     expiry_date = datetime.datetime.strptime(dropdown_exp_value, "%Y-%m-%d").date()
     if data_source == "bq":
-        if dropdown_value in STOCK_DATA_CACHE:
+        _cached = STOCK_DATA_CACHE.get(dropdown_value)
+        _fresh = False
+        if _cached is not None:
+            _age = time.time() - _cached[0]
+            _last = pd.to_datetime(_cached[1]['TIMESTAMP'], dayfirst=True, format='mixed').max().normalize()
+            # complete data (has the latest session) -> keep 6 h; still waiting for the bhav copy -> re-query every 10 min
+            _fresh = _age < (6 * 3600 if _last >= _expected_latest_session() else 600)
+        if _fresh:
             # Load instantly from RAM if the stock was already queried
-            df_stock = STOCK_DATA_CACHE[dropdown_value].copy()
+            df_stock = _cached[1].copy()
         else:
             # Import Data from Big Query with a fixed max history (150 days) to optimize parameter tweaks
             # _______________________________________________________________________________________________________________
@@ -2837,7 +2950,7 @@ def update_graph_31(data_source, dropdown_exp_value, dropdown_value, dropdown_n_
                 ORDER BY TIMESTAMP DESC LIMIT 150
             """
             df_stock = bq_client.query(sql_stock).to_dataframe()
-            STOCK_DATA_CACHE[dropdown_value] = df_stock.copy()
+            STOCK_DATA_CACHE[dropdown_value] = (time.time(), df_stock.copy())
     else:
         # Import Data from Local Machine
         # _______________________________________________________________________________________________________________
@@ -2854,6 +2967,10 @@ def update_graph_31(data_source, dropdown_exp_value, dropdown_value, dropdown_n_
     df_stock['TIMESTAMP'] = pd.to_datetime(df_stock['TIMESTAMP'], dayfirst=True, format='mixed')
     df_stock = df_stock.sort_values(by='TIMESTAMP', ascending=True)
 
+    # BigQuery / the CSV only gets a day after NSE publishes the bhav copy -> add the days it is still missing (incl. the
+    # running session) from Upstox. Q/T, delivery, COI ... stay empty on those rows until the bhav copy arrives.
+    df_stock = append_upstox_latest(df_stock, dropdown_value)
+
     # Moving averages and support / resistance levels use the FULL history (before the 'Days' slice), so the lines
     # already start at the first visible candle.
     ma_periods = {k: max(1, int(p or d_)) for k, p, d_ in
@@ -2864,8 +2981,14 @@ def update_graph_31(data_source, dropdown_exp_value, dropdown_value, dropdown_n_
 
     # In-memory slice based on user choice (extremely fast)
     df_stock = df_stock.tail(dropdown_n_days_value)
-    df_stock["BAR"] = df_stock["BAR"].astype(int)
-    df_stock = df_stock.reset_index()
+    df_stock["BAR"] = pd.to_numeric(df_stock["BAR"], errors="coerce").fillna(0).astype(int)
+    for _c in ("QTCO0321COL", "FUT_PRICE_COL", "FUT_COI_EXPLOSION_COL"):      # colour columns are empty on Upstox rows
+        if _c in df_stock.columns:
+            df_stock[_c] = df_stock[_c].where(df_stock[_c].notna(), "rgba(0,0,0,0)")
+    df_stock = df_stock.reset_index(drop=True)
+    _live_note = ""
+    if df_stock["LIVE_ROW"].iloc[-1]:
+        _live_note = "  |  ● latest candle from Upstox (Q/T, delivery, COI pending bhav copy)"
 
     # (Price / Volume / Q/T trend indicator rows were removed from the chart)
 
@@ -3037,9 +3160,9 @@ def update_graph_31(data_source, dropdown_exp_value, dropdown_value, dropdown_n_
     fig['layout']['yaxis7']['title'] = 'PCR'
     LTP = df_stock['EQ_CLOSE_PRICE'].iloc[-1]
     LTP_PREV = df_stock['EQ_CLOSE_PRICE'].iloc[-2]
-    PER_CHNG = ((LTP - LTP_PREV) / LTP * 100).round(1)
+    PER_CHNG = ((LTP - LTP_PREV) / LTP_PREV * 100).round(1)      # change vs previous close
     fig.update_layout(
-        xaxis_title=dropdown_value + str(" LTP: ") + str(LTP) + str(" Change: ") + str(PER_CHNG) + str("%"),
+        xaxis_title=dropdown_value + str(" LTP: ") + str(LTP) + str(" Change: ") + str(PER_CHNG) + str("%") + _live_note,
         uirevision=f"{dropdown_value}|{dropdown_exp_value}|{dropdown_n_days_value}")  # chain ticks keep zoom/drawings
 
     return fig
