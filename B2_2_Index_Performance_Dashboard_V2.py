@@ -4,7 +4,7 @@ NSE Performance Dashboard — optimized & redesigned.
 Key improvements over the original:
   PERFORMANCE
   - Vectorized `calculate_returns` (pandas merge, not a Python loop per group).
-  - Single reusable BigQuery client instead of a new client per query.
+  - Upstox historical-candle API instead of BigQuery for index and stock closes (see DATA SOURCE below).
   - One consolidated Upstox LTP fetch per tick (indices + selected constituents
     combined) via a dcc.Store, instead of two independent API calls firing on
     every interval tick.
@@ -12,7 +12,7 @@ Key improvements over the original:
     `data-theme` attribute + CSS variables — no server round-trip, no giant
     12-output callback re-shipping every style dict on every click.
   - In-memory TTL cache for the (large, network-fetched) Upstox instrument map
-    and for BigQuery pulls, with a manual "Refresh Data" button instead of only
+    and for the Upstox history pulls, with a manual "Refresh Data" button instead of only
     ever loading once at process start.
   - Paginated constituents table so large indices don't render hundreds of
     rows at once.
@@ -40,13 +40,24 @@ Key improvements over the original:
   - Callbacks are registered on `app` (not the global `dash.callback`), so this page can be mounted next to other Dash
     apps inside Analysis_Master_Dashboard.py without callbacks leaking between apps.
   - If UPSTOX_ACCESS_TOKEN is not set, today's Upstox token is read from GCS (same file the Stock / Index dashboards use).
+
+  DATA SOURCE (this version)
+  - Index and stock closing prices come from the Upstox historical-candle API (daily candles, HISTORY_DAYS calendar
+    days) instead of BigQuery. Indices load at start-up (one request each, in parallel and rate-limited); a stock's
+    history is fetched the first time an index containing it is selected, then cached. "Refresh Data" re-pulls it all.
+  - Index constituents still come from the mapping file (index_mapping.csv).
 """
 
 import ast
 import gzip
+import io
 import json
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
+from urllib.parse import quote
 
 import dash
 import numpy as np
@@ -59,9 +70,6 @@ import dash_bootstrap_components as dbc
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-PROJECT_ID = os.environ.get("BQ_PROJECT_ID", "phrasal-fire-373510")
-INDICES_TABLE = f"{PROJECT_ID}.Big_Bull_Analysis.Master_Data_Indices"
-EQUITY_TABLE = f"{PROJECT_ID}.Big_Bull_Analysis.Master_Data_Equity"
 MAPPING_PATH = os.environ.get("INDEX_MAPPING_PATH", "gs://bba_support_files/index_mapping.csv")
 
 # NEVER hardcode credentials in source. Set this in your environment / secret
@@ -95,12 +103,24 @@ def get_upstox_token():
 INTERVALS = [7, 14, 30, 45, 90, 365]
 LIVE_REFRESH_MS = 5000
 INSTRUMENT_MAP_TTL_SECS = 6 * 60 * 60  # instrument list changes rarely; 6h is plenty
-BQ_DATA_TTL_SECS = 15 * 60             # manual "Refresh Data" also busts this early
+DATA_TTL_SECS = 15 * 60                # Upstox history cache; "Refresh Data" busts it early
+
+# --- Upstox daily history (replaces BigQuery) ---
+HISTORY_DAYS = int(os.environ.get("HISTORY_DAYS", "1825"))          # calendar days of daily closes per symbol (~5 years)
+HIST_WORKERS = int(os.environ.get("UPSTOX_HIST_WORKERS", "8"))      # parallel requests
+HIST_MAX_RPS = float(os.environ.get("UPSTOX_HIST_MAX_RPS", "20"))   # overall request-rate ceiling (keeps under Upstox limits)
+UPSTOX_HIST_URL = "https://api.upstox.com/v3/historical-candle/{key}/days/1/{to_date}/{from_date}"
+# Index names in the mapping file that Upstox spells differently (mapping-file name -> Upstox name, both upper-case).
+# Names that cannot be resolved are listed in the console at start-up - add them here.
+INDEX_NAME_ALIASES = {
+    "NIFTY FINANCIAL SERVICES": "NIFTY FIN SERVICE",
+    "NIFTY MIDCAP SELECT": "NIFTY MID SELECT",
+}
 
 
 # ==============================================================================
 # LIGHTWEIGHT TTL CACHE (avoids re-fetching the ~large instrument file or
-# re-querying BigQuery on every page load / callback)
+# re-pulling Upstox history on every page load / callback)
 # ==============================================================================
 class TTLCache:
     def __init__(self):
@@ -131,42 +151,84 @@ _cache = TTLCache()
 # ==============================================================================
 # UPSTOX INSTRUMENT MAP + LIVE QUOTES
 # ==============================================================================
+def _instrument_map_from_csv():
+    """Fast path: the CSV instrument file parses in a few seconds with pandas (the JSON file is far heavier)."""
+    url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz"
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    wanted = {"instrument_key", "tradingsymbol", "trading_symbol", "name", "instrument_type", "exchange", "segment"}
+    df = pd.read_csv(io.BytesIO(response.content), compression="gzip", dtype=str, low_memory=False,
+                     usecols=lambda c: c in wanted)
+    sym_col = "tradingsymbol" if "tradingsymbol" in df.columns else "trading_symbol"
+    seg_col = "segment" if "segment" in df.columns else "exchange"
+    if not {"instrument_key", sym_col, seg_col}.issubset(df.columns):
+        raise ValueError(f"unexpected instrument columns: {list(df.columns)}")
+
+    seg = df[seg_col].astype(str)
+    master_map = {}
+    eq = df[seg == "NSE_EQ"]
+    if "instrument_type" in eq.columns:      # EQUITY rows last, so they win when a symbol appears more than once
+        eq = eq.sort_values("instrument_type", key=lambda s: s.eq("EQUITY"), kind="stable")
+    for sym, key in zip(eq[sym_col], eq["instrument_key"]):
+        if isinstance(sym, str) and sym:
+            master_map[sym.upper()] = key
+    ix = df[seg == "NSE_INDEX"]
+    for col in ("name", sym_col):
+        if col in ix.columns:
+            for val, key in zip(ix[col], ix["instrument_key"]):
+                if isinstance(val, str) and val:
+                    master_map[val.upper()] = key
+    return master_map
+
+
+def _instrument_map_from_json():
+    """Fallback: the original (slow) JSON instrument file."""
+    url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
+    master_map = {}
+    response = requests.get(url, stream=True, timeout=30)
+    response.raise_for_status()
+    with gzip.GzipFile(fileobj=response.raw) as gz:
+        raw_data = json.loads(gz.read().decode("utf-8"))
+
+    for item in raw_data:
+        if item.get("exchange") != "NSE":
+            continue
+        segment = item.get("segment")
+        inst_key = item.get("instrument_key")
+        if not segment or not inst_key:
+            continue
+
+        if segment == "NSE_EQ":
+            trading_sym = item.get("trading_symbol")
+            if trading_sym:
+                master_map[trading_sym.upper()] = inst_key
+        elif segment == "NSE_INDEX":
+            name = item.get("name")
+            if name:
+                master_map[name.upper()] = inst_key
+            trading_sym = item.get("trading_symbol")
+            if trading_sym:
+                master_map[trading_sym.upper()] = inst_key
+    return master_map
+
+
 def load_upstox_instrument_map():
+    """{UPPER SYMBOL / INDEX NAME: instrument_key} for NSE equities and indices (cached, never caches an empty map)."""
     cached = _cache.get("instrument_map")
     if cached is not None:
         return cached
 
-    url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
     master_map = {}
-    try:
-        response = requests.get(url, stream=True, timeout=30)
-        response.raise_for_status()
-        with gzip.GzipFile(fileobj=response.raw) as gz:
-            raw_data = json.loads(gz.read().decode("utf-8"))
-
-        for item in raw_data:
-            if item.get("exchange") != "NSE":
-                continue
-            segment = item.get("segment")
-            inst_key = item.get("instrument_key")
-            if not segment or not inst_key:
-                continue
-
-            if segment == "NSE_EQ":
-                trading_sym = item.get("trading_symbol")
-                if trading_sym:
-                    master_map[trading_sym.upper()] = inst_key
-            elif segment == "NSE_INDEX":
-                name = item.get("name")
-                if name:
-                    master_map[name.upper()] = inst_key
-                trading_sym = item.get("trading_symbol")
-                if trading_sym:
-                    master_map[trading_sym.upper()] = inst_key
-
+    for loader in (_instrument_map_from_csv, _instrument_map_from_json):
+        try:
+            master_map = loader()
+        except Exception as e:
+            print(f"[instrument-map] {loader.__name__} failed: {e}")
+            master_map = {}
+        if master_map:
+            break
+    if master_map:
         _cache.set("instrument_map", master_map, INSTRUMENT_MAP_TTL_SECS)
-    except Exception as e:
-        print(f"[instrument-map] fetch/parse failed: {e}")
     return master_map
 
 
@@ -208,25 +270,74 @@ def fetch_upstox_ltp(raw_identifiers):
 
 
 # ==============================================================================
-# BIGQUERY DATA (single client, cached pulls, synthetic fallback for local/demo runs)
+# UPSTOX DAILY HISTORY (index + stock closes; replaces BigQuery)
 # ==============================================================================
-_bq_client = None
+# Daily candles come from the Upstox historical-candle API, one request per instrument. Requests run in parallel
+# (HIST_WORKERS threads) behind a shared rate limiter and retry on HTTP 429 / 5xx.
+#   * indices: fetched at start-up / "Refresh Data" for every index in the mapping file
+#   * stocks:  fetched on demand - the first time an index is selected, only its constituents - then cached
+class _RateLimiter:
+    """Spaces request starts at least 1/max_rps seconds apart; shared by all worker threads."""
+
+    def __init__(self, max_rps):
+        self._interval = 1.0 / max(max_rps, 0.1)
+        self._lock = threading.Lock()
+        self._next = 0.0
+
+    def wait(self):
+        with self._lock:
+            now = time.monotonic()
+            start = max(now, self._next)
+            self._next = start + self._interval
+        if start > now:
+            time.sleep(start - now)
 
 
-def get_bq_client():
-    global _bq_client
-    if _bq_client is None:
-        from google.cloud import bigquery
-        _bq_client = bigquery.Client()
-    return _bq_client
+_limiter = _RateLimiter(HIST_MAX_RPS)
+_http = requests.Session()
+_http.mount("https://", requests.adapters.HTTPAdapter(pool_connections=HIST_WORKERS * 2,
+                                                      pool_maxsize=HIST_WORKERS * 2))
 
 
-def fetch_bq_data(query):
-    try:
-        return get_bq_client().query(query).to_dataframe()
-    except Exception as e:
-        print(f"[bigquery] query failed, falling back to demo data: {e}")
-        return None
+def _blank_closes():
+    return pd.DataFrame({"TIMESTAMP": pd.Series(dtype="datetime64[ns]"), "Close": pd.Series(dtype=float)})
+
+
+def fetch_daily_closes(instrument_key, days=None):
+    """Daily closing prices of one instrument from Upstox -> DataFrame[TIMESTAMP, Close], oldest first.
+    Returns an empty frame on any failure (no token, HTTP error, no candles)."""
+    token = get_upstox_token()
+    if not token:
+        return _blank_closes()
+    today = date.today()
+    url = UPSTOX_HIST_URL.format(key=quote(instrument_key, safe=""), to_date=today.isoformat(),
+                                 from_date=(today - timedelta(days=days or HISTORY_DAYS)).isoformat())
+    headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
+    for attempt in range(4):
+        _limiter.wait()
+        try:
+            response = _http.get(url, headers=headers, timeout=20)
+        except requests.RequestException as e:
+            print(f"[upstox-history] {instrument_key}: {e}")
+            time.sleep(0.5 * (attempt + 1))
+            continue
+        if response.status_code == 429 or response.status_code >= 500:     # rate limited / server hiccup: back off
+            time.sleep(1.0 * (attempt + 1))
+            continue
+        if response.status_code != 200:
+            print(f"[upstox-history] {instrument_key}: HTTP {response.status_code} {response.text[:150]}")
+            return _blank_closes()
+        candles = response.json().get("data", {}).get("candles", [])
+        if not candles:
+            return _blank_closes()
+        df = pd.DataFrame([[c[0], c[4]] for c in candles], columns=["TIMESTAMP", "Close"])    # [ts, o, h, l, c, v, oi]
+        df["TIMESTAMP"] = (pd.to_datetime(df["TIMESTAMP"], utc=True).dt.tz_convert("Asia/Kolkata")
+                           .dt.tz_localize(None).dt.normalize())
+        df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+        return (df.dropna().drop_duplicates("TIMESTAMP", keep="last")
+                .sort_values("TIMESTAMP").reset_index(drop=True))
+    print(f"[upstox-history] {instrument_key}: gave up after retries")
+    return _blank_closes()
 
 
 def load_mapping_file():
@@ -250,69 +361,122 @@ def load_mapping_file():
     return df
 
 
-def _synthetic_series(names, base_range, periods=400, vol=0.01):
-    dates = pd.date_range(end=pd.Timestamp.now(), periods=periods)
-    rows = []
-    rng = np.random.default_rng(seed=42)
-    for name in names:
-        val = base_range()
-        for d in dates:
-            val *= (1 + rng.normal(0, vol))
-            rows.append((name, d, val))
-    return rows
+def _empty_returns(group_col):
+    return pd.DataFrame(columns=[group_col, "Latest Price"] + [f"{d}D %" for d in INTERVALS])
 
 
 def get_indices_data():
-    query = f"SELECT UPPER(Index_Name) as Index_Name, TIMESTAMP, Closing_Index_Value FROM `{INDICES_TABLE}`"
-    df = fetch_bq_data(query)
-    if df is None:
-        rows = _synthetic_series(
-            ["NIFTY 50", "NIFTY BANK", "NIFTY NEXT 50"],
-            base_range=lambda: 20000.0,
-            vol=0.005,
-        )
-        df = pd.DataFrame(rows, columns=["Index_Name", "TIMESTAMP", "Closing_Index_Value"])
-    df["TIMESTAMP"] = pd.to_datetime(df["TIMESTAMP"]).dt.tz_localize(None)
-    return df
+    """Daily closes of every index listed in the mapping file, from Upstox (parallel, rate-limited)
+    -> long DataFrame [Index_Name, TIMESTAMP, Closing_Index_Value]."""
+    cols = ["Index_Name", "TIMESTAMP", "Closing_Index_Value"]
+    imap = load_upstox_instrument_map()
+    if not imap:
+        print("[upstox-history] Upstox instrument list unavailable (network?) - no index data")
+        return pd.DataFrame(columns=cols)
+    jobs, unresolved = [], []
+    for name in dict.fromkeys(mapping_df["Index Name"]):
+        key = imap.get(INDEX_NAME_ALIASES.get(name, name))
+        if key:
+            jobs.append((name, key))
+        else:
+            unresolved.append(name)
+    if unresolved:
+        print(f"[upstox-history] {len(unresolved)} index name(s) not found in the Upstox instrument list "
+              f"(add them to INDEX_NAME_ALIASES): {', '.join(unresolved)}")
+    if not jobs:
+        return pd.DataFrame(columns=cols)
+    if not get_upstox_token():
+        print("[upstox-history] no Upstox access token (set UPSTOX_ACCESS_TOKEN or generate today's token) - no index data")
+        return pd.DataFrame(columns=cols)
+
+    def work(job):
+        name, key = job
+        return fetch_daily_closes(key).assign(Index_Name=name).rename(columns={"Close": "Closing_Index_Value"})
+
+    with ThreadPoolExecutor(max_workers=HIST_WORKERS) as pool:
+        frames = [f for f in pool.map(work, jobs) if not f.empty]
+    if not frames:
+        return pd.DataFrame(columns=cols)
+    return pd.concat(frames, ignore_index=True)[cols]
 
 
-def get_equity_data():
-    query = f"SELECT SYMBOL, TIMESTAMP, EQ_CLOSE_PRICE FROM `{EQUITY_TABLE}`"
-    df = fetch_bq_data(query)
-    if df is None:
-        mapping = load_mapping_file()
-        all_symbols = set()
-        for const in mapping["Constituents"]:
-            try:
-                all_symbols.update(ast.literal_eval(const))
-            except Exception:
-                pass
-        rows = _synthetic_series(list(all_symbols)[:100], base_range=lambda: 1000 + np.random.randint(0, 2000))
-        df = pd.DataFrame(rows, columns=["SYMBOL", "TIMESTAMP", "EQ_CLOSE_PRICE"])
-    df["TIMESTAMP"] = pd.to_datetime(df["TIMESTAMP"]).dt.tz_localize(None)
-    return df
+# Stock history: fetched lazily per index, cached per symbol.
+_equity_hist = {}            # SYMBOL -> (expires_at, DataFrame[TIMESTAMP, EQ_CLOSE_PRICE])
+_equity_lock = threading.Lock()      # guards _equity_hist
+_ensure_lock = threading.Lock()      # one fetch round at a time (live ticks must not start duplicate fetches)
+_const_returns_cache = {}    # index name -> (expires_at, have_key, returns DataFrame); cleared on "Refresh Data"
+
+
+def ensure_equity_history(symbols):
+    """Fetch (in parallel, rate-limited) the Upstox daily closes of every symbol that is not cached yet / has expired.
+    Failures and unknown symbols are cached for 60 s only, so a transient error is retried soon but not every tick."""
+    with _ensure_lock:
+        now = time.time()
+        with _equity_lock:
+            todo = [s for s in dict.fromkeys(symbols) if s not in _equity_hist or now > _equity_hist[s][0]]
+        if not todo:
+            return
+        imap = load_upstox_instrument_map()
+
+        def work(sym):
+            key = imap.get(str(sym).upper())
+            if not key:
+                return sym, _blank_closes().rename(columns={"Close": "EQ_CLOSE_PRICE"})
+            return sym, fetch_daily_closes(key).rename(columns={"Close": "EQ_CLOSE_PRICE"})
+
+        with ThreadPoolExecutor(max_workers=HIST_WORKERS) as pool:
+            results = list(pool.map(work, todo))
+        with _equity_lock:
+            for sym, d in results:
+                _equity_hist[sym] = (time.time() + (DATA_TTL_SECS if not d.empty else 60), d)
+
+
+def _have_key(symbols):
+    """Which of `symbols` currently have cached history (derived caches are rebuilt when this changes)."""
+    with _equity_lock:
+        return tuple(sorted(s for s in symbols if _equity_hist.get(s) is not None and not _equity_hist[s][1].empty))
+
+
+def equity_history_frame(symbols):
+    """Long DataFrame [SYMBOL, TIMESTAMP, EQ_CLOSE_PRICE] of the cached history of `symbols`."""
+    with _equity_lock:
+        entries = [(s, _equity_hist.get(s)) for s in symbols]
+    frames = [e[1].assign(SYMBOL=s) for s, e in entries if e is not None and not e[1].empty]
+    if not frames:
+        return pd.DataFrame(columns=["SYMBOL", "TIMESTAMP", "EQ_CLOSE_PRICE"])
+    return pd.concat(frames, ignore_index=True)
+
+
+def get_constituent_returns(idx_name, symbols):
+    """Returns table (SYMBOL, Latest Price, 7D % ... 365D %) for an index's constituents, built from their Upstox history
+    (fetched on first use, then cached)."""
+    ensure_equity_history(symbols)
+    have = _have_key(symbols)
+    hit = _const_returns_cache.get(idx_name)
+    if hit and time.time() < hit[0] and hit[1] == have:
+        return hit[2]
+    hist = equity_history_frame(symbols)
+    ret = calculate_returns(hist, "SYMBOL", "EQ_CLOSE_PRICE") if not hist.empty else _empty_returns("SYMBOL")
+    _const_returns_cache[idx_name] = (time.time() + DATA_TTL_SECS, have, ret)
+    return ret
 
 
 def load_all_data(force=False):
-    """Pulls indices + equity history (cached, TTL-bound) and returns both the
-    raw frames (needed for the trend chart) and the computed returns tables."""
+    """Index daily closes from Upstox (cached, TTL-bound) plus the returns table built from them.
+    Stock history is NOT loaded here - it is fetched per index on demand (see get_constituent_returns)."""
     if force:
         _cache.invalidate("indices_hist")
-        _cache.invalidate("equity_hist")
 
     idx_hist = _cache.get("indices_hist")
     if idx_hist is None:
+        started = time.time()
         idx_hist = get_indices_data()
-        _cache.set("indices_hist", idx_hist, BQ_DATA_TTL_SECS)
+        if not idx_hist.empty:      # never cache a failed / empty pull
+            _cache.set("indices_hist", idx_hist, DATA_TTL_SECS)
+            print(f"[upstox-history] {idx_hist['Index_Name'].nunique()} indices loaded in {time.time() - started:.1f}s")
 
-    eq_hist = _cache.get("equity_hist")
-    if eq_hist is None:
-        eq_hist = get_equity_data()
-        _cache.set("equity_hist", eq_hist, BQ_DATA_TTL_SECS)
-
-    indices_returns = calculate_returns(idx_hist, "Index_Name", "Closing_Index_Value")
-    equity_returns = calculate_returns(eq_hist, "SYMBOL", "EQ_CLOSE_PRICE")
-
+    indices_returns = (calculate_returns(idx_hist, "Index_Name", "Closing_Index_Value")
+                       if not idx_hist.empty else _empty_returns("Index_Name"))
     indices_returns["Current LTP"] = indices_returns["Latest Price"]
     indices_returns["Today's Change %"] = 0.0
     indices_returns = indices_returns.drop(columns=["Latest Price"])  # superseded by "Current LTP"
@@ -323,7 +487,16 @@ def load_all_data(force=False):
     ]
     indices_returns = indices_returns[ordered_idx_cols]
 
-    return idx_hist, eq_hist, indices_returns, equity_returns
+    return idx_hist, indices_returns
+
+
+def data_status(idx_hist):
+    """One-line status under the 'Indices Performance' title."""
+    if idx_hist is None or idx_hist.empty:
+        return html.Span("⚠ No index data from Upstox - check the access token, then click Refresh Data.",
+                         style={"color": "var(--down)"})
+    return (f"Upstox daily closes · {idx_hist['Index_Name'].nunique()} indices · "
+            f"as of {idx_hist['TIMESTAMP'].max():%d %b %Y}")
 
 
 def calculate_returns(df, group_col, price_col):
@@ -390,7 +563,7 @@ def compute_kpis(indices_records):
 # ==============================================================================
 CORR_WINDOW_DAYS = 365  # correlation is computed on daily returns over the trailing year
 CORR_MIN_OBS = 20
-_corr_cache = {}        # {index_name: Series(symbol -> corr)}; cleared on "Refresh Data"
+_corr_cache = {}        # {index_name: (have_key, Series(symbol -> corr))}; cleared on "Refresh Data"
 
 
 def get_constituents(idx_name):
@@ -407,26 +580,30 @@ def get_constituents(idx_name):
 def compute_correlations(idx_name, symbols):
     """Pearson correlation of each stock's daily returns vs the index's daily
     returns over the trailing CORR_WINDOW_DAYS. (Returns, not raw prices — price
-    levels trend and would give spuriously high correlations.) Cached per index."""
-    if idx_name in _corr_cache:
-        return _corr_cache[idx_name]
+    levels trend and would give spuriously high correlations.) Cached per index;
+    rebuilt if more of the stocks' history has arrived since."""
+    ensure_equity_history(symbols)
+    have = _have_key(symbols)
+    hit = _corr_cache.get(idx_name)
+    if hit and hit[0] == have:
+        return hit[1]
 
     idx = idx_hist_df[idx_hist_df["Index_Name"] == idx_name]
-    if idx.empty or not symbols:
+    eq = equity_history_frame(symbols)
+    if idx.empty or eq.empty:
         return pd.Series(dtype=float)
 
     idx_px = idx.assign(d=idx["TIMESTAMP"].dt.normalize()).groupby("d")["Closing_Index_Value"].last()
     cutoff = idx_px.index.max() - pd.Timedelta(days=CORR_WINDOW_DAYS)
     idx_ret = idx_px[idx_px.index >= cutoff].pct_change(fill_method=None)
 
-    eq = eq_hist_df[eq_hist_df["SYMBOL"].isin(symbols)]
     eq = eq.assign(d=eq["TIMESTAMP"].dt.normalize())
     eq = eq[eq["d"] >= cutoff]
     wide = eq.pivot_table(index="d", columns="SYMBOL", values="EQ_CLOSE_PRICE", aggfunc="last")
     rets = wide.pct_change(fill_method=None)
 
     corr = rets.apply(lambda s: idx_ret.corr(s, min_periods=CORR_MIN_OBS)).round(2)
-    _corr_cache[idx_name] = corr
+    _corr_cache[idx_name] = (have, corr)
     return corr
 
 
@@ -571,7 +748,7 @@ INDEX_STRING = """
 # INITIAL DATA LOAD
 # ==============================================================================
 mapping_df = load_mapping_file()
-idx_hist_df, eq_hist_df, indices_returns, equity_returns = load_all_data()
+idx_hist_df, indices_returns = load_all_data()
 
 # ==============================================================================
 # APP
@@ -646,6 +823,8 @@ app.layout = html.Div(
                     html.Div(id="table-card", className="fade-card", style=HALF_CARD_STYLE, children=[
                         html.H4("Indices Performance", className="fw-semibold mb-2",
                                 style={"color": "var(--text-main)", "fontSize": "1rem"}),
+                        html.Div(id="data-status", children=data_status(idx_hist_df), className="mb-2",
+                                 style={"color": "var(--text-muted)", "fontSize": "0.7rem"}),
                         dash_table.DataTable(
                             id="indices-table",
                             columns=[{"name": i, "id": i} for i in indices_returns.columns],
@@ -739,16 +918,20 @@ def control_refresh(start_clicks, stop_clicks):
 @app.callback(
     Output("indices-table", "data", allow_duplicate=True),
     Output("indices-table", "columns"),
+    Output("data-status", "children"),
     Input("btn-refresh-data", "n_clicks"),
     prevent_initial_call=True,
 )
 def refresh_historical_data(n_clicks):
-    """Recomputes returns from BigQuery (or demo data) without restarting the process."""
-    global idx_hist_df, eq_hist_df, indices_returns, equity_returns
-    idx_hist_df, eq_hist_df, indices_returns, equity_returns = load_all_data(force=True)
+    """Re-pulls the index history from Upstox (and forgets the cached stock history) without restarting the process."""
+    global idx_hist_df, indices_returns
+    idx_hist_df, indices_returns = load_all_data(force=True)
     _corr_cache.clear()  # correlations depend on the history we just reloaded
+    _const_returns_cache.clear()
+    with _equity_lock:
+        _equity_hist.clear()
     columns = [{"name": i, "id": i} for i in indices_returns.columns]
-    return indices_returns.to_dict("records"), columns
+    return indices_returns.to_dict("records"), columns, data_status(idx_hist_df)
 
 
 @app.callback(
@@ -893,7 +1076,7 @@ def update_trend_chart(selected_rows, period, stock_symbol, data):
 
     title_text = idx_name
     if stock_symbol and stock_symbol in get_constituents(idx_name):
-        stock = eq_hist_df[eq_hist_df["SYMBOL"] == stock_symbol].sort_values("TIMESTAMP").dropna(subset=["EQ_CLOSE_PRICE"])
+        stock = equity_history_frame([stock_symbol]).sort_values("TIMESTAMP").dropna(subset=["EQ_CLOSE_PRICE"])
         if not stock.empty:
             sview = window(stock)
             fig.add_trace(go.Scatter(
@@ -962,7 +1145,10 @@ def update_constituents(selected_rows, quotes, search_term, view_mode, data, sel
     if not constituents:
         return empty(f"No constituent mapping found for {idx_name}.")
 
-    df_const = equity_returns[equity_returns["SYMBOL"].isin(constituents)].copy()
+    df_const = get_constituent_returns(idx_name, constituents).copy()
+    if df_const.empty:
+        return empty(f"No Upstox price history for the constituents of {idx_name}. "
+                     f"Check the access token, then click Refresh Data.")
     df_const["Current LTP"] = df_const["Latest Price"]
     df_const["Today's Change %"] = 0.0
     df_const["Correlation"] = df_const["SYMBOL"].map(compute_correlations(idx_name, constituents))
